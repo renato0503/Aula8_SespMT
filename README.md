@@ -1,54 +1,62 @@
-# Aula 8 — Do NotebookLM ao MVP no Ar
+# Aula 8 — Do sprint.md ao MVP no ar
 
 **Curso de Capacitação SESP/MT · Professor Renato Rosa**
 
----
+Caderno para os grupos construírem o MVP no Antigravity a partir do `contexto.md` e do `sprint.md`
+gerados no NotebookLM: TypeScript + Python num PWA, versionado no GitHub e publicado no GitHub Pages
+com deploy automático (GitHub Actions). São 34 seções e 54 prompts prontos. O PDF tem 44 páginas A4.
 
-## Conteúdo do caderno (32 seções em 9 partes)
+## Conteúdo
 
-| Parte | Conteúdo |
+| Parte | Seções |
 |---|---|
-| **Abertura** | Agenda · Checklist de confirmação |
-| **1 — Do NotebookLM ao Antigravity** | Prompts melhorados (contexto técnico + sprints com GitHub Pages), o que é MVP, por que PWA |
-| **2 — Stack técnica validada** | Vite + TypeScript + Vitest + vite-plugin-pwa + Python + GitHub Actions — explicações e justificativas |
-| **3 — Setup do projeto** | Criar repo no GitHub, scaffold (caminho normal e alternativo), vite.config.ts com base path, scripts npm, ícone SVG |
-| **4 — Estrutura de código** | src/domain/ · scripts/gerar_dados.py · testes Vitest |
-| **5 — GitHub Actions** | Workflow completo deploy.yml (Python + pytest → Node + Vitest → Pages) · Ativar GitHub Pages · Debug |
-| **6 — Prompts por sprint** | 4 sprints × 3 prompts = 12 prompts de exemplo para usar no painel Agent do Antigravity |
-| **7 — Fluxo completo** | Diagrama do fluxo diário · ativação do Pages · checklist de deploy |
-| **Encerramento** | Glossário · Quiz · Próximos passos |
+| **Abertura** | O que vamos construir · Como usar o caderno · Conferência dos dois arquivos · Prompts do NotebookLM em versão técnica |
+| **1 · O que dá para publicar** | O que "full stack" vira no GitHub Pages · Arquitetura (Python / TS / JS / GitHub) · Estrutura de pastas |
+| **2 · Trabalhando com o agente** | Anatomia do prompt · Ciclo planejar → gerar → testar → commitar · Regras de segurança |
+| **3 · Sprint 0** | Instalar Node e Python · Criar o projeto sem perder os .md · Publicar o repositório · Diagnóstico pelo agente · REGRAS-DO-PROJETO.md · `base` do Vite |
+| **4 · Sprints 1 a 5** | Dados sintéticos + LGPD (Python/pytest) · Regras, papéis e auditoria (TS/Vitest) · Telas · PWA · Homologação · Deploy com Actions · Versionamento · README |
+| **5 · Biblioteca de prompts** | Planejamento · Construção por camada · Depuração · Revisão · Prompts ruins × bons |
+| **Fechamento** | Problemas comuns · Checklist de entrega · Glossário · Quiz com respostas |
 
----
-
-## Arquivos principais
+## Arquivos
 
 ```
 Aula 8/
-├── caderno-dia8.html        # Fonte viva (tema claro/escuro, índice navegável)
-├── Caderno Dia 8 - SESP.pdf # Versão para imprimir (export via Playwright/Edge)
-├── gerar_caderno_aula8.py   # Gerador do HTML
-├── export_pdf.py            # Script de exportação PDF
-└── Dia-8-Sesp.pdf          # Slides do professor (referência)
+├── caderno-dia8.html          # fonte viva: índice, busca, tema claro/escuro, botão Copiar nos prompts
+├── Caderno Dia 8 - SESP.pdf   # versão para imprimir (capa, sumário com páginas, marcadores)
+├── gerar_caderno_aula8.py     # gerador do HTML (conteúdo + CSS)
+├── exportar_pdf.py            # gera HTML + PDF em duas passadas (números de página do sumário)
+└── Dia-8-Sesp.pdf             # slides legados do professor
 ```
 
----
+Para regerar tudo depois de editar o conteúdo:
+
+```
+python exportar_pdf.py
+```
+
+Requer `pip install playwright pymupdf` e `playwright install chromium`.
+
+## Como o PDF é paginado
+
+- A capa fica sozinha, e o sumário ocupa uma página com o número de página de cada seção.
+- Cada **Parte** começa em página nova, com uma faixa de abertura. Dentro de uma Parte, as seções
+  seguem em sequência, então não sobram páginas em branco.
+- Prompts, caixas, cartões, linhas de tabela e passos nunca se dividem entre páginas. Códigos com
+  mais de 45 linhas podem continuar na página seguinte.
+- Código e prompts quebram linha em vez de cortar na margem.
+- A impressão sempre usa o tema claro, e as respostas do quiz aparecem abertas.
 
 ## O que foi validado antes de entrar no caderno
 
-- Build Vite + TypeScript → dist/ com 21 entries precached
-- Service worker registra e faz cache offline (testado com Playwright)
-- `npm test` (Vitest): 3 testes passando em ~1.5s
-- `python scripts/gerar_dados.py`: 120 pedidos sintéticos, CPFs mascarados
-- `pytest -q scripts`: 1 teste passando (verificação LGPD)
-- GitHub Actions `deploy.yml`: workflow testado com ações oficiais v7/v6/v5
-
----
-
-## Referências das actions (versões used)
-
-- `actions/checkout@v7`
-- `actions/setup-node@v7`
-- `actions/setup-python@v7`
-- `actions/configure-pages@v6`
-- `actions/upload-pages-artifact@v5`
-- `actions/deploy-pages@v5`
+Um projeto de referência (Vite 8 + TypeScript, vite-plugin-pwa 1.3, Vitest 5, Python 3.12) foi testado com:
+- `python scripts/gerar_dados.py`: gera 120 pedidos sintéticos com CPF mascarado; o `pytest` passa;
+- `npm test`: 3 testes do Vitest passando;
+- `npm run build`: o service worker é gerado e 21 arquivos ficam em cache;
+- site servido em `/nome-do-repo/`, como no GitHub Pages: rotas por hash e JSON carregados com `BASE_URL`,
+  e o app funciona **offline**;
+- os passos do `deploy.yml` foram repetidos localmente (`npm ci`, testes, build); o workflow **não** foi
+  executado no GitHub. As actions usam as versões mais recentes em set/2026: `checkout@v7`,
+  `setup-node@v7`, `setup-python@v7`, `configure-pages@v6`, `upload-pages-artifact@v5`, `deploy-pages@v5`;
+- `npm create vite` numa pasta que já tem arquivos cancela, e a opção `--overwrite` apaga esses arquivos.
+  Por isso o caderno manda criar o projeto numa pasta nova e só depois mover os `.md`.

@@ -1,889 +1,1756 @@
 # -*- coding: utf-8 -*-
 """Gerador do caderno HTML da Aula 8 - SESP/MT.
-Foco: do contexto/notebooklm ao MVP no ar — prompts de exemplo,
-stack técnica validada, GitHub Pages + Actions.
+
+Foco: construir o MVP (TypeScript + Python, PWA) no Antigravity a partir do
+contexto.md e do sprint.md vindos do NotebookLM, versionar no GitHub e publicar
+no GitHub Pages. Inclui biblioteca de prompts para o agente.
+
+Mesmo sistema visual das Aulas 3-7 (CSS base copiado do gerador da Aula 6).
+
+Uso:
+    python gerar_caderno_aula8.py                  # gera caderno-dia8.html
+    python gerar_caderno_aula8.py paginas.json     # idem, com nº de página no sumário
+O PDF é gerado por exportar_pdf.py (que chama este script duas vezes).
 """
+import html
+import json
 import pathlib
-OUT = pathlib.Path(r"D:\Dev\Aula Sesp\Aula 8\caderno-dia8.html")
+import re
+import sys
+
+AQUI = pathlib.Path(__file__).resolve().parent
+OUT = AQUI / "caderno-dia8.html"
+PAGINAS = {}
+if len(sys.argv) > 1 and pathlib.Path(sys.argv[1]).exists():
+    PAGINAS = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
 
 # =================================================================
-# CSS — reaproveitado do caderno da Aula 6 (mesmo design system)
+# CSS
 # =================================================================
-CSS = """
-*,*::before,*::after{box-sizing:border-box}
+CSS_BASE = r"""
 :root{
   --paper:#faf9f6; --surface:#ffffff; --raised:#f3f1ec;
   --ink:#1a1d1e; --ink-soft:#4a4f52; --ink-faint:#82888c;
-  --border:#ddd9d0; --accent:#1f4b8f; --verde:#2e9e6b; --ambar:#c47f00; --vermelho:#c0392b; --roxo:#7b5ea7;
-  --code-bg:#1e2127; --code-ink:#abb2bf; --code-lang:#5c6370;
-  --mono:'JetBrains Mono',monospace; --serif:'Source Serif 4',Georgia,serif; --sans:'Archivo',system-ui,sans-serif;
-  --radius:10px; --shadow:0 2px 8px rgba(0,0,0,.08)
+  --accent:#1f4b8f; --accent-soft:#e8eefa;
+  --verde:#1c8a5b; --verde-soft:#e4f5ec;
+  --ambar:#b4790a; --ambar-soft:#fbeed9;
+  --vermelho:#c33b3b; --vermelho-soft:#fbe7e7;
+  --roxo:#6b3fa0; --roxo-soft:#efe6f8;
+  --border:#e3e0d8; --code-bg:#1e2124; --code-ink:#e6e6e6;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.05);
 }
-[data-theme=dark]{--paper:#171a1e;--surface:#1e2127;--raised:#252a33;--ink:#e8e6e3;--ink-soft:#9da3ae;--ink-faint:#5c6370;--border:#333842;--code-bg:#15181e;--code-ink:#abb2bf}
+:root[data-theme="dark"]{
+  --paper:#15171a; --surface:#1b1e22; --raised:#20242a;
+  --ink:#eceeef; --ink-soft:#b6bcc2; --ink-faint:#7d858c;
+  --accent:#6fa1e8; --accent-soft:#1c2a3f;
+  --verde:#5cc797; --verde-soft:#123528;
+  --ambar:#e0ac4c; --ambar-soft:#3a2c11;
+  --vermelho:#e77f7f; --vermelho-soft:#3a1c1c;
+  --roxo:#b18ce0; --roxo-soft:#2a1f3a;
+  --border:#2c3036; --code-bg:#0f1113; --code-ink:#d8dadb;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 4px 18px rgba(0,0,0,.35);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#15171a; --surface:#1b1e22; --raised:#20242a;
+    --ink:#eceeef; --ink-soft:#b6bcc2; --ink-faint:#7d858c;
+    --accent:#6fa1e8; --accent-soft:#1c2a3f;
+    --verde:#5cc797; --verde-soft:#123528;
+    --ambar:#e0ac4c; --ambar-soft:#3a2c11;
+    --vermelho:#e77f7f; --vermelho-soft:#3a1c1c;
+    --roxo:#b18ce0; --roxo-soft:#2a1f3a;
+    --border:#2c3036; --code-bg:#0f1113; --code-ink:#d8dadb;
+  }
+}
+*{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{margin:0;font-family:var(--sans);background:var(--paper);color:var(--ink);line-height:1.65;font-size:15px}
-::selection{background:var(--accent);color:#fff}
-::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
-
-header.top{background:linear-gradient(135deg,#0d2b6e 0%,#1f4b8f 55%,#2980b9 100%);color:#fff;padding:44px 24px 36px}
+body{
+  margin:0; background:var(--paper); color:var(--ink);
+  font-family:'Source Serif 4', Georgia, serif; font-size:17px; line-height:1.65;
+}
+h1,h2,h3,h4,.ui{font-family:'Archivo',sans-serif}
+code,pre,.mono{font-family:'JetBrains Mono',monospace}
+a{color:var(--accent)}
+header.top{
+  padding:40px 24px 28px; border-bottom:1px solid var(--border);
+  background:linear-gradient(180deg,var(--surface),var(--paper));
+}
 header.top .inner{max-width:1160px;margin:0 auto}
-header.top .kicker{font-size:11.5px;text-transform:uppercase;letter-spacing:.1em;opacity:.75;display:block;margin-bottom:8px}
-header.top h1{margin:0 0 10px;font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:800;line-height:1.2}
-header.top .sub{opacity:.88;max-width:680px;margin:0 0 14px;font-size:14.5px;line-height:1.6}
-header.top .meta{font-size:12.5px;opacity:.65;font-family:var(--mono)}
-
-.wrap.shell{display:grid;grid-template-columns:240px 1fr;max-width:1400px;margin:0 auto;min-height:calc(100vh - 160px)}
-nav.toc{position:sticky;top:0;height:100vh;overflow-y:auto;padding:20px 16px;border-right:1px solid var(--border);background:var(--raised);font-size:13px}
-nav.toc input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--ink);font-family:var(--sans);font-size:12.5px;margin-bottom:12px}
-nav.toc .grp{font-size:10px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink-faint);font-weight:700;margin:14px 0 4px;padding-top:10px;border-top:1px solid var(--border)}
-nav.toc a{display:block;padding:3px 6px;border-radius:5px;color:var(--ink-soft);transition:background .15s}
-nav.toc a:hover,nav.toc a.active{background:var(--accent);color:#fff;text-decoration:none}
-main{flex:1;padding:36px 40px 60px;min-width:0}
-section{margin-bottom:48px;break-inside:avoid;padding-bottom:28px;border-bottom:1px dashed var(--border)}
-section:last-child{border:none}
-.secnum{font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-right:8px}
-h2{margin:0 0 16px;font-size:1.35rem;font-weight:700;border-left:4px solid var(--accent);padding-left:12px}
-h3{margin:20px 0 8px;font-size:1.05rem;font-weight:700;color:var(--ink-soft)}
-p{margin:0 0 12px}
-ul,ol{margin:0 0 12px;padding-left:22px}
-li{margin-bottom:4px}
-code{font-family:var(--mono);font-size:.875em;background:var(--raised);padding:1px 5px;border-radius:4px}
-pre{background:var(--code-bg);color:var(--code-ink);padding:14px 16px;border-radius:var(--radius);overflow:auto;font-size:13px;line-height:1.55;margin:12px 0}
-pre code{background:none;padding:0}
-
-.ficha,.callout{border-radius:var(--radius);padding:14px 16px;margin:16px 0;font-size:14px}
-.ficha .lbl,.callout .lbl{font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:6px}
-.ficha.g{background:#eaf4ea;border-left:4px solid var(--verde)}
-.ficha.g .lbl{color:var(--verde)}
-.ficha.a{background:#eaf0fb;border-left:4px solid var(--accent)}
-.ficha.a .lbl{color:var(--accent)}
-.ficha.r{background:#fdf0ee;border-left:4px solid var(--vermelho)}
-.ficha.r .lbl{color:var(--vermelho)}
-.ficha.p{background:#f3eeff;border-left:4px solid var(--roxo)}
-.ficha.p .lbl{color:var(--roxo)}
-.callout.note{background:#eaf0fb;border-left:4px solid var(--accent)}
-.callout.tip{background:#eaf4ea;border-left:4px solid var(--verde)}
-.callout.err{background:#fdf0ee;border-left:4px solid var(--vermelho)}
-.callout.purple{background:#f3eeff;border-left:4px solid var(--roxo)}
-.callout .lbl{color:var(--ink-soft)}
-
-.tbl{overflow-x:auto;margin:12px 0}
-table{width:100%;border-collapse:collapse;font-size:13.8px}
-th{text-align:left;padding:8px 12px;background:var(--raised);border-bottom:2px solid var(--border);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft)}
-td{padding:8px 12px;border-bottom:1px solid var(--border)}
-tr:last-child td{border:none}
-td.num,th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
-
-ul.f{list-style:none;margin:16px 0;padding:14px 16px;border-radius:12px;background:var(--code-bg);color:var(--code-ink);position:relative;font-family:var(--mono);font-size:13px;line-height:1.6}
-ul.f li{white-space:pre;margin:0;padding:1px 0}
-ul.f::before{content:attr(data-lang);position:absolute;top:8px;right:14px;font-family:var(--sans);font-size:10.5px;color:var(--code-lang);text-transform:uppercase;letter-spacing:.07em}
-ul.f[data-lang]::before{content:attr(data-lang)}
-
-ol.step{list-style:none;margin:16px 0;padding:0;counter-reset:step}
-ol.step li{counter-increment:step;display:flex;flex-direction:column;gap:6px;padding:14px 16px 14px 56px;margin-bottom:10px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);position:relative;break-inside:avoid}
-ol.step li::before{content:counter(step);position:absolute;left:14px;top:14px;width:30px;height:30px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
-ol.step li .stitle{font-weight:700;color:var(--ink)}
-ol.step li .snote{font-size:13px;color:var(--ink-soft);padding-left:2px;border-left:2px solid var(--border);padding-left:10px}
-
-.q{margin:16px 0;padding:14px 16px;background:var(--raised);border-radius:var(--radius)}
-.q .stem{font-weight:600;margin-bottom:8px}
-.q ol{margin:0;padding-left:20px}
-.q li{padding:3px 0}
-.q details{margin-top:10px;font-size:13.5px;color:var(--ink-soft)}
-.q summary{cursor:pointer;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint)}
-
-.aplicab{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:16px 0}
-.aplicab>div{padding:12px 14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
-.aplicab .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-faint);font-weight:700;display:block;margin-bottom:4px}
-
-.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin:16px 0}
-.grid2 .card{padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border)}
-.grid2 .card h4{margin:0 0 6px;font-size:14px}
-
-.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:16px 0}
-.fnode{display:flex;flex-direction:column;align-items:center;gap:4px}
-.flow .circ{width:42px;height:42px;background:var(--accent);color:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:18px}
-.flow .lbl{font-size:11px;color:var(--ink-soft);text-align:center;max-width:70px}
-.flow .arrow{font-size:18px;color:var(--ink-faint)}
-
-.kpi{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0}
-.kpi .k{flex:1;min-width:100px;padding:14px;border-radius:var(--radius);background:var(--surface);border:1px solid var(--border);text-align:center}
-.kpi .val{font-size:1.9rem;font-weight:800;color:var(--accent);font-family:var(--mono);line-height:1}
-.kpi .lbl{font-size:11.5px;color:var(--ink-soft);margin-top:4px}
-
-.btnref{display:inline-block;padding:4px 10px;background:var(--raised);border:1px solid var(--border);border-radius:6px;font-size:12.5px;font-family:var(--mono);color:var(--ink-soft)}
-
-.uimock{border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:16px 0;background:var(--surface)}
-.uimock .bar{background:var(--raised);padding:8px 14px;display:flex;gap:7px;align-items:center;border-bottom:1px solid var(--border)}
-.uimock .dot{width:9px;height:9px;border-radius:50%;background:var(--ink-faint);opacity:.5}
-.uimock .barlabel{font-family:var(--sans);font-size:12px;color:var(--ink-faint);margin-left:6px}
-.uimock .body{display:grid;grid-template-columns:44px 200px 1fr;min-height:230px}
-@media(max-width:700px){.uimock .body{grid-template-columns:34px 1fr}.uimock .body .panel-side{display:none}}
-.uimock .rail{background:var(--raised);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;padding:10px 0;gap:16px}
-.uimock .rail .ico{width:22px;height:22px;border-radius:6px;background:var(--border)}
+.kicker{font-family:'Archivo',sans-serif;font-size:12.5px;letter-spacing:.09em;text-transform:uppercase;
+  color:var(--accent); background:var(--accent-soft); display:inline-block; padding:4px 10px; border-radius:20px; font-weight:600;}
+header.top h1{font-size:clamp(28px,4vw,42px); margin:14px 0 6px; letter-spacing:-.01em}
+header.top p.sub{color:var(--ink-soft); font-size:17px; margin:0; max-width:760px}
+header.top .meta{margin-top:14px; font-size:13.5px; color:var(--ink-faint); font-family:'Archivo',sans-serif}
+.wrap.shell{
+  max-width:1160px; margin:0 auto; padding:28px 24px 100px;
+  display:grid; grid-template-columns:1fr; gap:28px;
+}
+@media(min-width:1000px){ .wrap.shell{grid-template-columns:250px 1fr;} }
+nav.toc{
+  align-self:start; position:sticky; top:16px; max-height:calc(100vh - 32px); overflow:auto;
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:16px;
+  font-family:'Archivo',sans-serif; font-size:13.3px;
+}
+nav.toc input{
+  width:100%; padding:8px 10px; margin-bottom:10px; border-radius:8px; border:1px solid var(--border);
+  background:var(--paper); color:var(--ink); font-family:inherit; font-size:12.8px;
+}
+nav.toc .grp{color:var(--ink-faint); text-transform:uppercase; letter-spacing:.06em; font-size:10.8px;
+  font-weight:700; margin:14px 0 5px;}
+nav.toc .grp:first-child{margin-top:0}
+nav.toc a{display:block; color:var(--ink-soft); text-decoration:none; padding:4.5px 8px; border-radius:7px; line-height:1.35}
+nav.toc a:hover{background:var(--raised); color:var(--ink)}
+nav.toc a.active{background:var(--accent-soft); color:var(--accent); font-weight:600}
+main section{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  padding:30px 32px; margin-bottom:22px; box-shadow:var(--shadow); scroll-margin-top:16px;
+}
+main section .secnum{font-family:'Archivo',sans-serif; font-size:12px; color:var(--ink-faint); letter-spacing:.08em; text-transform:uppercase}
+main section h2{font-size:24px; margin:6px 0 16px; letter-spacing:-.01em}
+main section h3{font-size:17.5px; margin:22px 0 8px}
+main section p{margin:0 0 13px}
+main section ul, main section ol{margin:0 0 13px; padding-left:22px}
+main section li{margin-bottom:5px}
+.ficha{border-radius:12px; padding:16px 18px; margin:16px 0; border-left:4px solid var(--accent); background:var(--accent-soft); font-family:'Archivo',sans-serif; font-size:15px}
+.ficha.g{border-color:var(--verde); background:var(--verde-soft)}
+.ficha.a{border-color:var(--ambar); background:var(--ambar-soft)}
+.ficha.r{border-color:var(--vermelho); background:var(--vermelho-soft)}
+.ficha.p{border-color:var(--roxo); background:var(--roxo-soft)}
+.ficha b.lbl{display:block; text-transform:uppercase; font-size:11px; letter-spacing:.08em; margin-bottom:5px; opacity:.85}
+.callout{border-radius:12px; padding:14px 18px; margin:16px 0; font-size:15.3px; border:1px solid var(--border); background:var(--raised)}
+.callout.note{border-color:var(--accent); background:var(--accent-soft)}
+.callout.tip{border-color:var(--verde); background:var(--verde-soft)}
+.callout.err{border-color:var(--vermelho); background:var(--vermelho-soft)}
+.callout.purple{border-color:var(--roxo); background:var(--roxo-soft)}
+.callout b.lbl{font-family:'Archivo',sans-serif; text-transform:uppercase; font-size:11px; letter-spacing:.08em; display:block; margin-bottom:5px}
+ul.f{list-style:none; margin:16px 0; padding:14px 16px; border-radius:12px; background:var(--code-bg); color:var(--code-ink);
+  font-family:'JetBrains Mono',monospace; font-size:13.6px; overflow-x:auto; position:relative;}
+ul.f li{white-space:pre; margin:0; padding:1px 0}
+ul.f::before{content:attr(data-lang); position:absolute; top:8px; right:14px; font-family:'Archivo',sans-serif;
+  font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#8b9199;}
+.tk{color:#e6e6e6}.tk-k{color:#7fb4ea}.tk-s{color:#a8d18d}.tk-c{color:#7e8792;font-style:italic}.tk-n{color:#e0ac4c}.tk-b{color:#e39fd6;font-weight:700}
+.tbl{overflow-x:auto; margin:16px 0}
+table{width:100%; border-collapse:collapse; font-family:'Archivo',sans-serif; font-size:14.3px}
+table th{text-align:left; background:var(--raised); padding:9px 12px; border-bottom:2px solid var(--border); font-weight:700}
+table td{padding:9px 12px; border-bottom:1px solid var(--border); vertical-align:top}
+table td.num, table th.num{text-align:right}
+ol.step{list-style:none; margin:16px 0; padding:0; counter-reset:stp}
+ol.step li{counter-increment:stp; position:relative; padding:4px 0 14px 40px; border-left:2px solid var(--border); margin-left:14px}
+ol.step li:last-child{border-color:transparent; padding-bottom:0}
+ol.step li::before{content:counter(stp); position:absolute; left:-14px; top:0; width:28px; height:28px; border-radius:50%;
+  background:var(--accent); color:#fff; font-family:'Archivo',sans-serif; font-weight:700; font-size:13px; display:flex; align-items:center; justify-content:center}
+ol.step .stitle{font-family:'Archivo',sans-serif; font-weight:700; font-size:15.5px; margin-bottom:2px}
+ol.step .snote{color:var(--ink-faint); font-size:13.6px; margin-top:4px}
+.btnref{display:inline-block; font-family:'JetBrains Mono',monospace; font-size:12.8px; background:var(--raised);
+  border:1px solid var(--border); border-radius:6px; padding:1.5px 7px; color:var(--ink)}
+.q{border:1px solid var(--border); border-radius:12px; padding:14px 18px; margin:12px 0; background:var(--raised)}
+.q .stem{font-family:'Archivo',sans-serif; font-weight:700; margin-bottom:8px}
+.q details summary{cursor:pointer; color:var(--accent); font-family:'Archivo',sans-serif; font-size:13.8px; font-weight:600}
+.q details[open] summary{margin-bottom:6px}
+.aplicab{display:grid; grid-template-columns:1fr; gap:12px; margin:16px 0}
+@media(min-width:760px){.aplicab{grid-template-columns:1fr 1fr 1fr}}
+.aplicab > div{border:1px solid var(--border); border-radius:12px; padding:14px 16px; background:var(--raised)}
+.aplicab .lbl{font-family:'Archivo',sans-serif; font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px; color:var(--accent)}
+.grid2{display:grid; grid-template-columns:1fr; gap:14px; margin:16px 0}
+@media(min-width:760px){.grid2{grid-template-columns:1fr 1fr}}
+.card{border:1px solid var(--border); border-radius:12px; padding:16px 18px; background:var(--raised)}
+.card h4{margin:0 0 8px; font-size:15.5px}
+.uimock{border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:16px 0; background:var(--surface)}
+.uimock .bar{background:var(--raised); padding:8px 14px; display:flex; gap:7px; align-items:center; border-bottom:1px solid var(--border)}
+.uimock .dot{width:9px;height:9px;border-radius:50%; background:var(--ink-faint); opacity:.5}
+.uimock .barlabel{font-family:'Archivo',sans-serif; font-size:12px; color:var(--ink-faint); margin-left:6px}
+.uimock .body{display:grid; grid-template-columns:44px 200px 1fr; min-height:230px}
+@media(max-width:700px){.uimock .body{grid-template-columns:34px 1fr; }  .uimock .body .panel-side{display:none}}
+.uimock .rail{background:var(--raised); border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:10px 0; gap:16px}
+.uimock .rail .ico{width:22px;height:22px;border-radius:6px; background:var(--border)}
 .uimock .rail .ico.on{background:var(--accent)}
-.uimock .panel-side{background:var(--surface);border-right:1px solid var(--border);padding:12px}
-.uimock .panel-side .ttl{font-family:var(--sans);font-weight:700;font-size:12.5px;margin-bottom:8px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.05em}
-.uimock .fileline{font-family:var(--mono);font-size:12.6px;padding:3px 6px;border-radius:5px;color:var(--ink-soft)}
+.uimock .panel-side{background:var(--surface); border-right:1px solid var(--border); padding:12px}
+.uimock .panel-side .ttl{font-family:'Archivo',sans-serif; font-weight:700; font-size:12.5px; margin-bottom:8px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.05em}
+.uimock .fileline{font-family:'JetBrains Mono',monospace; font-size:12.6px; padding:3px 6px; border-radius:5px; color:var(--ink-soft)}
 .uimock .fileline.mod{color:var(--ambar)}
 .uimock .fileline.new{color:var(--verde)}
 .uimock .canvas{padding:16px}
-.actbar{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;margin:16px 0;background:var(--surface)}
-.actbar .rail2{background:var(--code-bg);padding:18px 22px 18px 14px;display:flex;flex-direction:column;gap:13px;align-items:flex-start}
-.actbar .rail2 .aicon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;background:rgba(255,255,255,.07);position:relative;color:#e6e6e6}
+.actbar{display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--border); border-radius:12px; overflow:hidden; margin:16px 0; background:var(--surface)}
+.actbar .rail2{background:var(--code-bg); padding:18px 22px 18px 14px; display:flex; flex-direction:column; gap:13px; align-items:flex-start}
+.actbar .rail2 .aicon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;background:rgba(255,255,255,.07); position:relative; color:#e6e6e6}
 .actbar .rail2 .aicon.on{background:var(--accent)}
-.actbar .rail2 .aicon .num{position:absolute;left:-18px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10.5px;color:#9aa0a6}
-.actbar .legend{flex:1 1 280px;padding:14px 18px;font-family:var(--sans);font-size:13.2px;min-width:240px}
-.actbar .legend .li{display:flex;gap:10px;padding:6px 0;border-bottom:1px dashed var(--border)}
+.actbar .rail2 .aicon .num{position:absolute; left:-18px; top:50%; transform:translateY(-50%); font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9aa0a6}
+.actbar .legend{flex:1 1 280px; padding:14px 18px; font-family:'Archivo',sans-serif; font-size:13.2px; min-width:240px}
+.actbar .legend .li{display:flex; gap:10px; padding:6px 0; border-bottom:1px dashed var(--border)}
 .actbar .legend .li:last-child{border:none}
-.actbar .legend .li .n{min-width:20px;font-family:var(--mono);color:var(--accent);font-weight:700}
+.actbar .legend .li .n{min-width:20px; font-family:'JetBrains Mono',monospace; color:var(--accent); font-weight:700}
 .actbar .legend .li b{display:block}
-.actbar .legend .li span.d{color:var(--ink-soft);font-size:12.6px}
-.welcomemock{padding:30px 20px;text-align:center}
-.welcomemock .wlogo{font-size:30px;margin-bottom:6px}
-.welcomemock .wtitle{font-family:var(--sans);font-weight:700;font-size:17px;margin-bottom:20px}
-.welcomemock .wbtns{display:flex;flex-direction:column;gap:10px;max-width:260px;margin:0 auto}
-.welcomemock .wbtn{padding:10px 16px;border-radius:8px;border:1px solid var(--border);font-family:var(--sans);font-size:13.6px;font-weight:600;text-align:left}
-.welcomemock .wbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-.welcomemock .wspaces{text-align:left;max-width:300px;margin:26px auto 0}
-.welcomemock .wlbl{font-family:var(--sans);font-size:10.8px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
-.welcomemock .wsitem{font-family:var(--sans);font-size:13px;padding:6px 10px;border-radius:7px;color:var(--ink-soft);border:1px solid var(--border);margin-bottom:6px}
-.welcomemock .wsitem small{display:block;font-size:11px;color:var(--ink-faint)}
-.agentmock{display:flex;flex-direction:column;min-height:270px}
-.agentmock .ahead{background:var(--raised);padding:8px 14px;display:flex;justify-content:space-between;align-items:center;font-family:var(--sans);font-size:12.5px;font-weight:600;border-bottom:1px solid var(--border)}
-.agentmock .ahead .aicons{color:var(--ink-faint);font-size:13px;display:flex;gap:8px}
-.agentmock .abody{flex:1;padding:16px;display:flex;flex-direction:column;gap:12px}
-.agentmock .alogo{font-size:28px}
-.agentmock .aname{font-family:var(--sans);font-size:14px;font-weight:700}
-.agentmock .ainput{border:1px solid var(--border);border-radius:8px;overflow:hidden}
-.agentmock .ph{padding:8px 12px;font-size:12.5px;color:var(--ink-faint);background:var(--surface)}
-.agentmock .arow{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--raised);font-size:12px;color:var(--ink-soft)}
-.agentmock .adisc{padding:0 4px;font-size:11.5px;color:var(--ink-faint);line-height:1.5}
-.lab{border:1px solid var(--border);border-radius:var(--radius);padding:18px;margin:16px 0;background:var(--surface)}
-.lab-title{font-weight:700;font-size:1rem;margin-bottom:12px;display:flex;align-items:center;gap:8px}
-.lab-title::before{content:'LAB';font-size:10px;background:var(--verde);color:#fff;padding:2px 7px;border-radius:5px;letter-spacing:.06em}
-.passolab{display:flex;gap:14px;margin:14px 0;padding:12px 14px;background:var(--raised);border-radius:var(--radius);font-size:14px}
-.passolab .pnum{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--accent);flex-shrink:0;line-height:1.2}
-.passolab .ptitle{font-weight:700;margin-bottom:4px}
-.passolab .pbody{color:var(--ink-soft);font-size:13.5px}
-.cenario{border-left:4px solid var(--ambar);padding:14px 16px;margin:16px 0;background:#fffdf5;border-radius:0 var(--radius) var(--radius) 0}
-.cenario-title{font-weight:700;font-size:.95rem;margin-bottom:10px;color:var(--ambar)}
-.vcard{border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin:8px 0;display:flex;gap:14px;align-items:flex-start}
-.vcard-icon{font-size:26px;flex-shrink:0;line-height:1}
-.vcard h4{margin:0 0 4px;font-size:14px}
-.vcard p{margin:0;font-size:13.5px;color:var(--ink-soft)}
-dl.glossary{margin:12px 0}
-dl.glossary dt{font-weight:700;color:var(--accent);font-family:var(--mono);font-size:13px}
-dl.glossary dd{margin:0 0 8px 16px;font-size:14px;color:var(--ink-soft)}
-@media print{.themebtn,.pdfbtn,nav.toc{display:none}.wrap.shell{grid-template-columns:1fr;display:block}main section{break-inside:avoid;box-shadow:none}section{padding-bottom:20px}}
-footer.pagefoot{max-width:1160px;margin:0 auto;padding:0 24px 60px;color:var(--ink-faint);font-family:var(--sans);font-size:12.5px;text-align:center}
+.actbar .legend .li span.d{color:var(--ink-soft); font-size:12.6px}
+.welcomemock{padding:30px 20px; text-align:center}
+.welcomemock .wlogo{font-size:30px; margin-bottom:6px}
+.welcomemock .wtitle{font-family:'Archivo',sans-serif; font-weight:700; font-size:17px; margin-bottom:20px}
+.welcomemock .wbtns{display:flex; flex-direction:column; gap:10px; max-width:260px; margin:0 auto}
+.welcomemock .wbtn{padding:10px 16px; border-radius:8px; border:1px solid var(--border); font-family:'Archivo',sans-serif; font-size:13.6px; font-weight:600; text-align:left}
+.welcomemock .wbtn.primary{background:var(--accent); color:#fff; border-color:var(--accent)}
+.welcomemock .wspaces{text-align:left; max-width:300px; margin:26px auto 0}
+.welcomemock .wlbl{font-family:'Archivo',sans-serif; font-size:10.8px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.07em; margin-bottom:8px}
+.welcomemock .wsitem{font-family:'Archivo',sans-serif; font-size:13px; padding:6px 10px; border-radius:7px; color:var(--ink-soft); border:1px solid var(--border); margin-bottom:6px}
+.welcomemock .wsitem small{display:block; font-size:11px; color:var(--ink-faint)}
+.agentmock{display:flex; flex-direction:column; min-height:270px}
+.agentmock .ahead{padding:10px 16px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; font-family:'Archivo',sans-serif; font-weight:700; font-size:13.5px}
+.agentmock .ahead .aicons{font-weight:400; color:var(--ink-faint); font-size:15px; letter-spacing:6px}
+.agentmock .abody{flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px}
+.agentmock .abody .alogo{font-size:26px}
+.agentmock .abody .aname{font-family:'Archivo',sans-serif; font-weight:700; color:var(--ink-soft)}
+.agentmock .ainput{margin:14px; border:1px solid var(--border); border-radius:12px; padding:12px 14px; font-family:'Archivo',sans-serif}
+.agentmock .ainput .ph{color:var(--ink-faint); font-size:13px; margin-bottom:10px}
+.agentmock .ainput .arow{display:flex; justify-content:space-between; align-items:center; font-size:11.8px; color:var(--ink-faint)}
+.agentmock .adisc{text-align:center; font-family:'Archivo',sans-serif; font-size:10.6px; color:var(--ink-faint); padding:0 16px 12px}
+.flow{display:flex; flex-wrap:wrap; align-items:stretch; gap:0; margin:18px 0}
+.flow .fnode{flex:1 1 140px; text-align:center; padding:16px 10px; position:relative}
+.flow .fnode .circ{width:64px;height:64px;border-radius:50%;border:2.5px solid var(--accent); margin:0 auto 10px;
+  display:flex; align-items:center; justify-content:center; background:var(--surface); font-size:22px}
+.flow .fnode .lbl{font-family:'Archivo',sans-serif; font-weight:600; font-size:13.4px}
+.flow .fnode:not(:last-child)::after{content:"→"; position:absolute; right:-6px; top:26px; color:var(--accent); font-size:20px; font-weight:700}
+.kpi{display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:14px; margin:16px 0}
+.kpi .k{border:1px solid var(--border); border-radius:12px; padding:16px; text-align:center; background:var(--raised)}
+.kpi .k .val{font-family:'Archivo',sans-serif; font-weight:800; font-size:28px; color:var(--accent)}
+.kpi .k .lbl{font-size:12.6px; color:var(--ink-faint); font-family:'Archivo',sans-serif; margin-top:4px}
+.glossary dt{font-family:'Archivo',sans-serif; font-weight:700; margin-top:10px}
+.glossary dd{margin:2px 0 0; color:var(--ink-soft)}
+.themebtn,.pdfbtn{position:fixed; right:20px; z-index:50; font-family:'Archivo',sans-serif; font-size:12.8px; font-weight:600;
+  border:1px solid var(--border); background:var(--surface); color:var(--ink); border-radius:24px; padding:9px 16px; cursor:pointer; box-shadow:var(--shadow)}
+.themebtn{bottom:20px}
+.pdfbtn{bottom:66px}
+footer.pagefoot{max-width:1160px;margin:0 auto;padding:0 24px 60px;color:var(--ink-faint);font-family:'Archivo',sans-serif;font-size:12.5px;text-align:center}
 """
+
+CSS_EXTRA = r"""
+/* coluna do grid não estica com blocos de código longos (sem rolagem lateral no celular) */
+.wrap.shell{grid-template-columns:minmax(0,1fr)}
+@media(min-width:1000px){ .wrap.shell{grid-template-columns:250px minmax(0,1fr)} }
+main{min-width:0}
+/* celular: índice no topo, sem ficar grudado sobre o conteúdo */
+@media(max-width:999px){ nav.toc{position:static; max-height:none} }
+@media screen and (max-width:600px){ .flow{flex-direction:column; align-items:center}
+  .flow .fnode{flex:none; width:100%; padding:8px 10px 18px}
+  .flow .fnode:not(:last-child)::after{content:"↓"; right:auto; left:50%; transform:translateX(-50%); top:auto; bottom:-6px} }
+.grid2 > *, .legenda > *, .antesdepois > *, .aplicab > *, .kpi > *{min-width:0}
+code{overflow-wrap:anywhere; font-size:.9em; background:var(--raised); border:1px solid var(--border); border-radius:5px; padding:0 4px}
+ul.f code, table code{background:none; border:none; padding:0}
+ul.f{padding-top:30px}
+ul.f.pr li{white-space:pre-wrap}
+ul.f .ph{background:rgba(224,172,76,.22); color:#f2c46d; border-radius:4px; padding:0 3px}
+ul.f .cpy{position:absolute; top:6px; left:14px; font-family:'Archivo',sans-serif; font-size:10.5px; font-weight:700;
+  letter-spacing:.06em; text-transform:uppercase; background:rgba(255,255,255,.08); color:#c9cdd2; border:1px solid rgba(255,255,255,.14);
+  border-radius:6px; padding:2px 9px; cursor:pointer}
+ul.f .cpy:hover{background:rgba(255,255,255,.16)}
+.phead{display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:18px 0 -8px; font-family:'Archivo',sans-serif; font-size:13.8px; font-weight:700}
+.phead .onde{font-weight:600; font-size:11px; color:var(--ink-faint); text-transform:uppercase; letter-spacing:.05em;
+  border:1px solid var(--border); border-radius:20px; padding:1px 9px; background:var(--raised)}
+.parte{border-radius:14px; padding:18px 22px; margin:-6px 0 22px; background:var(--accent); color:#fff}
+.parte .pk{font-family:'Archivo',sans-serif; font-size:11.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; opacity:.85}
+.parte .pt{font-family:'Archivo',sans-serif; font-size:23px; font-weight:800; margin:2px 0 6px; line-height:1.2}
+.parte .pd{font-size:15px; opacity:.95; margin:0}
+.parte ol{margin:10px 0 0; padding-left:20px; font-family:'Archivo',sans-serif; font-size:13.4px; opacity:.95}
+.parte ol li{margin:1px 0}
+.antesdepois{display:grid; grid-template-columns:1fr; gap:12px; margin:14px 0}
+@media(min-width:760px){.antesdepois{grid-template-columns:1fr 1fr}}
+.antesdepois > div{border-radius:12px; padding:12px 14px; border:1px solid var(--border)}
+.antesdepois .ruim{background:var(--vermelho-soft); border-color:var(--vermelho)}
+.antesdepois .bom{background:var(--verde-soft); border-color:var(--verde)}
+.antesdepois .lbl{font-family:'Archivo',sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; margin-bottom:6px}
+.antesdepois .ruim .lbl{color:var(--vermelho)} .antesdepois .bom .lbl{color:var(--verde)}
+.antesdepois p{margin:0; font-size:14.6px}
+.sprint{display:grid; grid-template-columns:46px 1fr; gap:14px; border:1px solid var(--border); border-radius:12px;
+  padding:14px 16px; margin:12px 0; background:var(--raised)}
+.sprint .n{width:38px; height:38px; border-radius:10px; background:var(--verde); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-family:'Archivo',sans-serif; font-weight:800; font-size:18px}
+.sprint h4{margin:0 0 4px; font-family:'Archivo',sans-serif; font-size:15.5px}
+.sprint .meta{font-size:12.5px; color:var(--ink-faint); font-family:'Archivo',sans-serif; margin-bottom:6px}
+.sprint ul{margin:6px 0 0 0; padding-left:20px; font-size:14.6px}
+.check{list-style:none; padding-left:0 !important}
+.check li{padding-left:28px; position:relative}
+.check li::before{content:"☐"; position:absolute; left:4px; top:-1px; color:var(--accent); font-size:17px}
+.legenda{display:grid; grid-template-columns:1fr; gap:10px; margin:14px 0}
+@media(min-width:760px){.legenda{grid-template-columns:1fr 1fr}}
+.legenda > div{display:flex; gap:12px; align-items:flex-start; border:1px solid var(--border); border-radius:12px; padding:12px 14px; background:var(--raised)}
+.legenda .ic{font-size:22px; line-height:1}
+.legenda > div > div > b{font-family:'Archivo',sans-serif; display:block; font-size:14.5px}
+.legenda span.d{font-size:14px; color:var(--ink-soft)}
+.q .resp-lbl{font-family:'Archivo',sans-serif; font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--verde); margin-right:6px}
+.sumario{display:none}
+
+@media print{
+  @page { size: A4; margin: 14mm 13mm 16mm 13mm; }
+  :root, :root[data-theme="dark"], :root:not([data-theme="light"]){
+    --paper:#ffffff !important; --surface:#ffffff !important; --raised:#f4f2ed !important;
+    --ink:#1a1d1e !important; --ink-soft:#4a4f52 !important; --ink-faint:#7a8084 !important;
+    --accent:#1f4b8f !important; --accent-soft:#e8eefa !important;
+    --verde:#1c8a5b !important; --verde-soft:#e4f5ec !important;
+    --ambar:#b4790a !important; --ambar-soft:#fbeed9 !important;
+    --vermelho:#c33b3b !important; --vermelho-soft:#fbe7e7 !important;
+    --roxo:#6b3fa0 !important; --roxo-soft:#efe6f8 !important;
+    --border:#e3e0d8 !important; --code-bg:#1e2124 !important; --code-ink:#e6e6e6 !important;
+    --shadow:none !important; color-scheme:light;
+  }
+  html{ -webkit-print-color-adjust:exact; print-color-adjust:exact }
+  html, body{ margin:0; padding:0; background:#fff; font-size:13.5px; line-height:1.5 }
+  .themebtn,.pdfbtn,nav.toc,button,.cpy{ display:none !important }
+
+  /* capa */
+  header.top{ padding:70mm 0 12mm !important; background:none !important; border-bottom:3px solid var(--accent) !important }
+  header.top .inner{ max-width:100% !important; padding:0 !important }
+  header.top h1{ font-size:34px !important; margin:14px 0 10px !important }
+  header.top p.sub{ font-size:16px !important; max-width:none !important }
+
+  /* sumário */
+  .sumario{ display:block; break-before:page; page-break-before:always; break-after:page; page-break-after:always; font-family:'Archivo',sans-serif }
+  .sumario h2{ font-size:19px; margin:0 0 2mm; padding-bottom:2mm; border-bottom:2px solid var(--accent) }
+  .sumario .sg{ font-weight:800; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--accent); margin:3mm 0 .5mm }
+  .sumario .si{ display:flex; align-items:baseline; gap:6px; font-size:11.8px; line-height:1.35; padding:.35mm 0; color:var(--ink) }
+  .sumario .si .n{ min-width:20px; color:var(--ink-faint) }
+  .sumario .si .dots{ flex:1; border-bottom:1px dotted #b9b6ae; transform:translateY(-3px) }
+  .sumario .si .pg{ min-width:18px; text-align:right; font-weight:700 }
+
+  .wrap.shell{ display:block !important; max-width:100% !important; margin:0 !important; padding:0 !important }
+  main{ overflow:visible !important }
+
+  /* seções correm uma após a outra (sem páginas em branco); cada PARTE abre página nova */
+  main section{
+    background:#fff !important; box-shadow:none !important; border:none !important; border-radius:0 !important;
+    padding:0 !important; margin:0 0 8mm !important; break-before:auto; page-break-before:auto;
+  }
+  main section:not(.inicio-parte){ border-top:1px solid var(--border) !important; padding-top:5mm !important }
+  main section.inicio-parte{ break-before:page; page-break-before:always }
+  .parte{ margin:0 0 6mm !important; padding:6mm 7mm !important; break-inside:avoid }
+  .parte .pt{ font-size:22px !important }
+  main section h2{ font-size:18.5px !important; margin:1mm 0 4mm !important }
+  main section h3{ font-size:14.8px !important; margin:10px 0 5px !important }
+  main section p{ margin:0 0 9px }
+
+  h1, h2, h3, h4, .secnum, .phead, ol.step .stitle{ break-after:avoid; page-break-after:avoid; break-inside:avoid }
+  h2 + *, h3 + *, h4 + *, .phead + *, .shead + *{ break-before:avoid; page-break-before:avoid }
+  .shead{ break-inside:avoid; page-break-inside:avoid; break-after:avoid; page-break-after:avoid }
+  .parte{ break-after:avoid; page-break-after:avoid }
+  .ficha, .callout, .q, ul.f, .sprint, .card, .aplicab > div, .kpi, .kpi .k, .flow, ol.step li,
+  tr, dt, dd, .antesdepois > div, .legenda > div, .uimock, img, svg{ break-inside:avoid; page-break-inside:avoid }
+  dt{ break-after:avoid }
+  thead{ display:table-header-group }
+  p, li{ orphans:3; widows:3 }
+  .tbl{ overflow:visible !important }
+
+  /* código: quebra linha em vez de cortar na margem */
+  ul.f{ overflow:visible !important; font-size:10.4px !important; padding:22px 10px 8px !important; margin:10px 0 !important; line-height:1.45 }
+  ul.f li{ white-space:pre-wrap !important; overflow-wrap:anywhere }
+  ul.f::before{ top:6px !important }
+  ul.f.longo{ break-inside:auto; page-break-inside:auto }
+  .phead{ margin:12px 0 -6px !important }
+
+  table{ font-size:11.3px !important } table th, table td{ padding:5px 8px !important }
+  .ficha, .callout{ padding:8px 11px !important; margin:8px 0 !important; font-size:12.8px !important }
+  .card{ padding:10px 12px !important; font-size:12.8px }
+  .aplicab, .grid2, .legenda{ gap:8px !important; margin:10px 0 !important }
+  .aplicab{ grid-template-columns:1fr 1fr 1fr !important }
+  .grid2, .legenda, .antesdepois{ grid-template-columns:1fr 1fr !important }
+  .aplicab > div{ padding:8px 10px !important; font-size:12.4px }
+  .kpi{ grid-template-columns:repeat(4,1fr) !important; gap:8px !important }
+  .kpi .k{ padding:8px !important } .kpi .k .val{ font-size:22px !important }
+
+  /* fluxos: todos os passos numa linha só */
+  .flow{ flex-wrap:nowrap !important; margin:10px 0 !important }
+  .flow .fnode{ flex:1 1 0 !important; padding:6px 3px !important; min-width:0 }
+  .flow .fnode .circ{ width:44px !important; height:44px !important; font-size:18px !important; margin-bottom:6px !important }
+  .flow .fnode .lbl{ font-size:10.6px !important; line-height:1.25 }
+  .flow .fnode:not(:last-child)::after{ right:-7px !important; top:15px !important; font-size:15px !important }
+
+  ol.step li{ padding-bottom:9px !important }
+  /* quiz: respostas visíveis no PDF */
+  .q details summary{ display:none }
+  footer.pagefoot{ padding:4mm 0 0 !important; break-before:avoid }
+}
+"""
+
+CSS = CSS_BASE + CSS_EXTRA
 
 # =================================================================
 # HELPERS
 # =================================================================
-def p(txt): return f"<p>{txt}</p>"
-def h3(txt): return f"<h3>{txt}</h3>"
-def ficha(kind, label, body): return f'<div class="ficha {kind}"><b class="lbl">{label}</b>{body}</div>'
-def callout(kind, label, body): return f'<div class="callout {kind}"><b class="lbl">{label}</b>{body}</div>'
-def tbl(headers, rows, num_cols=None):
-    num_cols = num_cols or []
-    th = "".join(f'<th class="{"num" if i in num_cols else ""}">{h}</th>' for i, h in enumerate(headers))
-    trs = ""
-    for r in rows:
-        tds = "".join(f'<td class="{"num" if i in num_cols else ""}">{c}</td>' for i, c in enumerate(r))
-        trs += f"<tr>{tds}</tr>"
+def p(txt):
+    return f"<p>{txt}</p>"
+
+def h3(txt):
+    return f"<h3>{txt}</h3>"
+
+def ul(items):
+    return "<ul>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>"
+
+def checklist(items):
+    return "<ul class='check'>" + "".join(f"<li>{i}</li>" for i in items) + "</ul>"
+
+def ficha(kind, label, body):
+    return f'<div class="ficha {kind}"><b class="lbl">{label}</b>{body}</div>'
+
+def callout(kind, label, body):
+    return f'<div class="callout {kind}"><b class="lbl">{label}</b>{body}</div>'
+
+def tbl(headers, rows):
+    th = "".join(f"<th>{h}</th>" for h in headers)
+    trs = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
     return f'<div class="tbl"><table><thead><tr>{th}</tr></thead><tbody>{trs}</tbody></table></div>'
-def code(lines, lang="bash"):
-    html_lines = ""
-    for ln in lines: html_lines += f"<li>{ln}</li>"
-    return f'<ul class="f" data-lang="{lang}">{html_lines}</ul>'
+
+def _lines(text):
+    lns = text.strip("\n").split("\n")
+    ind = min((len(l) - len(l.lstrip(" ")) for l in lns if l.strip()), default=0)
+    return [l[ind:].rstrip() for l in lns]
+
+def code(text, lang="bash"):
+    """Bloco de código. O texto é escapado (pode conter <, >, &, chaves)."""
+    linhas = _lines(text)
+    lis = "".join(f"<li>{html.escape(l) if l else ' '}</li>" for l in linhas)
+    longo = " longo" if len(linhas) > 45 else ""
+    return f'<ul class="f{longo}" data-lang="{lang}">{lis}</ul>'
+
+PH = re.compile(r"(\[[A-ZÁÉÍÓÚÂÊÔÃÕÇ0-9][^\]\n]{1,70}\])")
+
+def prompt(text, titulo="", onde="Painel Agent do Antigravity"):
+    """Prompt pronto para copiar. [CAMPOS] em destaque amarelo; linha longa quebra."""
+    lis = ""
+    for l in _lines(text):
+        esc = html.escape(l) if l else " "
+        lis += "<li>" + PH.sub(r'<span class="ph">\1</span>', esc) + "</li>"
+    head = f'<div class="phead">💬 {titulo}<span class="onde">{onde}</span></div>' if titulo else ""
+    return head + f'<ul class="f pr" data-lang="prompt">{lis}</ul>'
+
 def step(items):
     out = "<ol class='step'>"
     for it in items:
-        titulo, acao = it[0], it[1]
-        nota = it[2] if len(it) > 2 else ""
-        out += f"<li><div class='stitle'>{titulo}</div><div>{acao}</div>"
-        if nota: out += f"<div class='snote'>{nota}</div>"
+        out += f"<li><div class='stitle'>{it[0]}</div><div>{it[1]}</div>"
+        if len(it) > 2 and it[2]:
+            out += f"<div class='snote'>{it[2]}</div>"
         out += "</li>"
-    out += "</ol>"
-    return out
+    return out + "</ol>"
+
 def q(stem, options, ans_idx, hint=""):
     opts = "".join(f"<li>{o}</li>" for o in options)
-    ans = options[ans_idx]
-    hint_html = f"<p style='margin-top:6px;color:var(--ink-faint);font-size:13.6px'>{hint}</p>" if hint else ""
-    return (f'<div class="q"><div class="stem">{stem}</div><ol>{opts}</ol>'
-            f'<details><summary>Ver resposta</summary><p><b>{ans}</b></p>{hint_html}</details></div>')
+    letra = "abcd"[ans_idx]
+    hint_html = f" {hint}" if hint else ""
+    return (f'<div class="q"><div class="stem">{stem}</div><ol type="a">{opts}</ol>'
+            f'<details><summary>Ver resposta</summary><p><span class="resp-lbl">Resposta</span>'
+            f'<b>({letra}) {options[ans_idx]}.</b>{hint_html}</p></details></div>')
+
 def aplicab(quando, porque, exemplo):
-    return (f'<div class="aplicab"><div><div class="lbl">Quando usar</div>{quando}</div>'
+    return (f'<div class="aplicab"><div><div class="lbl">Quando</div>{quando}</div>'
             f'<div><div class="lbl">Por que</div>{porque}</div>'
-            f'<div><div class="lbl">Exemplo real</div>{exemplo}</div></div>')
+            f'<div><div class="lbl">Exemplo no MVP</div>{exemplo}</div></div>')
+
 def grid2(cards):
-    out = '<div class="grid2">'
-    for titulo, body in cards: out += f'<div class="card"><h4>{titulo}</h4>{body}</div>'
-    out += '</div>'
-    return out
+    return '<div class="grid2">' + "".join(f'<div class="card"><h4>{t}</h4>{b}</div>' for t, b in cards) + '</div>'
+
 def flow_h(nodes):
-    out = '<div class="flow">'
-    for i, (emo, lbl) in enumerate(nodes):
-        out += f'<div class="fnode"><div class="circ">{emo}</div><div class="lbl">{lbl}</div></div>'
-        if i < len(nodes) - 1: out += '<div class="arrow">\u27a4</div>'
-    out += '</div>'
-    return out
+    return '<div class="flow">' + "".join(
+        f'<div class="fnode"><div class="circ">{e}</div><div class="lbl">{l}</div></div>' for e, l in nodes) + '</div>'
+
 def kpi(items):
-    out = '<div class="kpi">'
-    for v, l in items: out += f'<div class="k"><div class="val">{v}</div><div class="lbl">{l}</div></div>'
-    out += '</div>'
-    return out
-def btn(txt): return f'<span class="btnref">{txt}</span>'
-def ui_welcome(): return (f'<div class="uimock"><div class="bar"><div class="dot"></div><div class="dot"></div>'
-    f'<div class="dot"></div><span class="barlabel">Antigravity IDE \u2014 tela inicial</span></div>'
-    f'<div class="welcomemock"><div class="wlogo">\U0001f5a5</div><div class="wtitle">Antigravity IDE</div>'
-    f'<div class="wbtns"><div class="wbtn primary">\U0001f4c1&nbsp;&nbsp;Open Folder</div>'
-    f'<div class="wbtn">\U0001f517&nbsp;&nbsp;Clone Repository</div></div>'
-    f'<div class="wspaces"><div class="wlbl">Workspaces</div>'
-    f'<div class="wsitem">contexto.md &amp; sprint.md<small>Aula 8</small></div>'
-    f'<div class="wsitem">mvp-pedidos-sesp<small>D:\\Dev</small></div></div></div></div>')
-def ui_agent(): return (f'<div class="uimock"><div class="bar"><div class="dot"></div><div class="dot"></div>'
-    f'<div class="dot"></div><span class="barlabel">Painel Agent</span></div>'
-    f'<div class="agentmock"><div class="ahead">Agent<span class="aicons">+ \U0001f559 \u22ef \u2715</span></div>'
-    f'<div class="abody"><div class="alogo">\U0001f916</div><div class="aname">Antigravity Agent</div>'
-    f'<div class="ainput"><div class="ph">Ask anything, @ to mention, / for actions</div>'
-    f'<div class="arow"><span>GPT-OSS 120B (Medium) \u25be</span><span>\u27a4</span></div></div>'
-    f'<div class="adisc">AI may make mistakes. Double-check all generated code.</div></div></div>')
+    return '<div class="kpi">' + "".join(
+        f'<div class="k"><div class="val">{v}</div><div class="lbl">{l}</div></div>' for v, l in items) + '</div>'
+
+def sprint(n, titulo, meta, itens):
+    return (f'<div class="sprint"><div class="n">{n}</div><div><h4>{titulo}</h4>'
+            f'<div class="meta">{meta}</div>{ul(itens)}</div></div>')
+
+def antesdepois(ruim, bom):
+    return (f'<div class="antesdepois"><div class="ruim"><div class="lbl">✗ Prompt vago</div><p>{ruim}</p></div>'
+            f'<div class="bom"><div class="lbl">✓ Prompt técnico</div><p>{bom}</p></div></div>')
+
+def legenda(items):
+    return '<div class="legenda">' + "".join(
+        f'<div><span class="ic">{i}</span><div><b>{t}</b><span class="d">{d}</span></div></div>' for i, t, d in items) + '</div>'
+
 def glossary(items):
-    dl = "<dl class='glossary'>"
-    for term, defi in items: dl += f"<dt>{term}</dt><dd>{defi}</dd>"
-    dl += "</dl>"
-    return dl
-def lab(title, body): return f'<div class="lab"><div class="lab-title">{title}</div>{body}</div>'
-def passolab(num, title, body): return f'<div class="passolab"><div class="pnum">{num}</div><div><div class="ptitle">{title}</div><div class="pbody">{body}</div></div></div>'
-def cenario(title, body): return f'<div class="cenario"><div class="cenario-title">{title}</div>{body}</div>'
-def vcard(icon, title, body): return f'<div class="vcard"><div class="vcard-icon">{icon}</div><div><h4>{title}</h4>{body}</div></div>'
+    return "<dl class='glossary'>" + "".join(f"<dt>{t}</dt><dd>{d}</dd>" for t, d in items) + "</dl>"
 
 # =================================================================
 # ESTADO / TOC
 # =================================================================
-sections = []
-toc_groups = []
-cur_group, cur_items = None, []
+sections = []          # (anchor, titulo, body, grupo_idx)
+grupos = []            # (titulo, descricao)
 
-def grp(titulo):
-    global cur_group, cur_items
-    if cur_group: toc_groups.append((cur_group, cur_items))
-    cur_group, cur_items = titulo, []
+def grp(titulo, descricao=""):
+    grupos.append((titulo, descricao))
+
 def section(anchor, titulo, body_html):
-    sections.append((anchor, titulo, body_html))
-    cur_items.append((anchor, titulo))
+    sections.append((anchor, titulo, body_html, len(grupos) - 1))
+
+REPO = "mvp-pedidos-compra"
 
 # =================================================================
-# SEÇÕES DO CADERNO
+# ABERTURA
 # =================================================================
-grp("Abertura")
-section("agenda", "Agenda do Dia 8 — Do NotebookLM ao MVP no Ar",
-    p("Hoje é o dia em que o projeto sai do papel e começa a virar código. "
-      "Você vai aprender a transformar o contexto e as sprints que o NotebookLM "
-      "gerou em um MVP funcional, hospedado no GitHub Pages — tudo em TypeScript, "
-      "com PWA e testes automatizados.") +
-    tbl(["Bloco", "O que vamos fazer"],
-        [["Manhã (08h–12h)", "Validar os prompts do NotebookLM · Configurar o projeto no Antigravity · Escrever as primeiras linhas de código do MVP"],
-         ["Tarde (13h–17h)", "Publicar no GitHub · Configurar deploy automático · Próximos passos e prompts para cada sprint"]],
-        num_cols=[])
+grp("Abertura", "O que vamos construir hoje, como usar este caderno e a conferência dos arquivos que vieram do NotebookLM.")
+
+section("agenda", "Onde estamos e o que vamos construir hoje",
+    p("Na Aula 7 vocês planejaram o projeto: definiram a dor, os usuários, os dados, o BPMN, a arquitetura, "
+      "o uso da IA e as sprints. Depois levaram tudo do <b>NotebookLM</b> para o <b>Antigravity</b> em dois arquivos: "
+      "o <code>contexto.md</code> (o resumo do projeto) e o <code>sprint.md</code> (as sprints técnicas). "
+      "Hoje esses dois arquivos viram <b>software de verdade</b>: um MVP instalável no celular, versionado no GitHub "
+      "e publicado na internet pelo GitHub Pages.") +
+    flow_h([("🧠", "NotebookLM<br>(ideação)"), ("📄", "contexto.md<br>+ sprint.md"), ("🤖", "Agente do<br>Antigravity"),
+            ("💾", "Commit e push<br>no GitHub"), ("⚙️", "GitHub Actions<br>(build)"), ("🌐", "GitHub Pages<br>(PWA no ar)")]) +
+    kpi([("5", "sprints para entregar o MVP"), ("3", "linguagens: TS, JS e Python"), ("1", "link público no GitHub Pages"),
+         ("50+", "prompts prontos neste caderno")]) +
+    h3("O que vocês levam do Dia 8") +
+    ul(["Um repositório no GitHub com o código do MVP, histórico de commits e README;",
+        "o MVP publicado em <code>https://SEU-USUARIO.github.io/NOME-DO-REPO/</code>, instalável como aplicativo (PWA);",
+        "deploy automático: cada <code>push</code> na branch <code>main</code> atualiza o site sozinho;",
+        "uma biblioteca de prompts para continuar desenvolvendo nas próximas aulas."]) +
+    ficha("", "Exemplo usado neste caderno",
+      "Para os exemplos ficarem concretos, usamos o <b>Portal de Pedidos de Compra</b>, o To-Be do exemplo da Aula 7 "
+      "(Solicitante abre o pedido → Sistema valida → Cotação → Controladoria audita → Secretário aprova no painel). "
+      f"O repositório de exemplo se chama <code>{REPO}</code>. Troquem sempre pelo projeto de vocês.")
 )
 
-section("checklist-confirmacao", "Checklist: você trouxe tudo?",
+section("como-usar", "Como usar este caderno",
+    p("O caderno é um <b>roteiro para seguir em ordem</b>: cada Parte termina com algo funcionando e um commit no GitHub. "
+      "Estes são os elementos que se repetem:") +
+    legenda([
+        ("💬", "Bloco de prompt", "Texto para copiar e colar no <b>painel Agent</b> do Antigravity (ou no chat do NotebookLM, quando indicado). No HTML há um botão <b>Copiar</b> em cada bloco."),
+        ("🟨", "[CAMPOS EM AMARELO]", "Dentro dos prompts, o que está entre colchetes é para <b>substituir</b> pelos dados do projeto de vocês antes de enviar."),
+        ("⌨️", "Bloco de terminal", "Comandos para digitar no terminal do Antigravity (<b>Terminal → New Terminal</b>). Uma linha por vez; o que vem depois de <code>#</code> é comentário."),
+        ("📄", "Bloco de arquivo", "Conteúdo de um arquivo do projeto (o nome aparece no canto do bloco). Serve de gabarito para conferir o que o agente gerou."),
+        ("🔴", "Caixa vermelha", "Armadilha ou regra que não pode ser quebrada (LGPD, comandos que apagam arquivos, chaves secretas)."),
+        ("🟢", "Caixa verde", "Dica, boa prática ou a mensagem de commit sugerida para aquela etapa."),
+    ]) +
+    tbl(["Parte", "O que vocês fazem", "Termina com"],
+        [["1 · O que dá para publicar", "Entender o que \"full stack\" vira num site estático", "A arquitetura e a estrutura de pastas definidas"],
+         ["2 · Trabalhando com o agente", "Aprender o formato de prompt e o ciclo de cada tarefa", "Regras de segurança combinadas no grupo"],
+         ["3 · Sprint 0", "Instalar, criar o projeto e publicar o repositório", "Repositório no GitHub + agente conhecendo o projeto"],
+         ["4 · Sprints 1 a 5", "Dados, regras, telas, PWA, testes e deploy", "MVP no ar em <code>github.io</code>"],
+         ["5 · Biblioteca de prompts", "Consultar quando precisar", "—"],
+         ["Fechamento", "Resolver problemas e conferir a entrega", "Checklist completo"]])
+)
+
+section("conferir-arquivos", "Antes de começar: vocês rodaram estes dois prompts no NotebookLM?",
+    p("Tudo o que vem depois depende da qualidade do <code>contexto.md</code> e do <code>sprint.md</code>. "
+      "O agente do Antigravity <b>não conhece o projeto de vocês</b>: ele só sabe o que está escrito nesses arquivos. "
+      "Confirmem primeiro que os dois existem e foram gerados com estes prompts:") +
+    tbl(["Arquivo", "Prompt usado no NotebookLM", "Para que serve no Antigravity"],
+        [["<code>contexto.md</code>", "<i>\"Anote todo o contexto fornecido até aqui para a ideação e prototipagem do projeto\"</i>",
+          "A \"memória\" do projeto: problema, usuários, dados, regras. O agente consulta antes de cada tarefa."],
+         ["<code>sprint.md</code>", "<i>\"Gere sprints de execução do projeto de forma técnica em (JS, TS, Python em PWA)\"</i>",
+          "O roteiro de construção: o que fazer em cada sprint. O agente executa uma tarefa por vez."]]) +
+    h3("Teste rápido: os arquivos de vocês estão bons o suficiente?") +
+    p("Abram os dois arquivos no Antigravity e marquem o que eles contêm:") +
+    checklist(["<b>contexto.md</b> descreve a dor com número (ex.: \"10 dias para consolidar\")",
+               "<b>contexto.md</b> lista os papéis de usuário (Admin, Editor, Leitor, Aprovador) e o que cada um faz",
+               "<b>contexto.md</b> lista as entidades de dados com seus campos (ex.: Pedido: protocolo, unidade, valor…)",
+               "<b>contexto.md</b> diz quais campos são sensíveis (LGPD) e como mascarar",
+               "<b>contexto.md</b> descreve o fluxo To-Be passo a passo",
+               "<b>sprint.md</b> tem sprints numeradas, cada uma com tarefas e um critério de \"pronto\"",
+               "<b>sprint.md</b> diz em qual linguagem fica cada parte (TS, JS, Python)",
+               "<b>sprint.md</b> considera que o site será <b>estático</b>, no GitHub Pages"]) +
+    callout("tip", "Resultado do teste",
+      "<b>7 ou 8 marcados:</b> sigam em frente. <b>4 a 6:</b> usem os prompts melhorados da próxima seção para "
+      "complementar. <b>3 ou menos:</b> gerem os arquivos de novo com os prompts melhorados antes de escrever código. "
+      "Os 20 minutos que isso leva economizam horas de retrabalho com o agente.")
+)
+
+section("prompts-notebooklm", "Os prompts do NotebookLM, versão técnica",
+    p("Os prompts originais funcionam, mas deixam o NotebookLM decidir sozinho o formato e o nível de detalhe. "
+      "As versões abaixo pedem uma <b>estrutura fixa</b>, com as informações que o agente de código mais usa. "
+      "Rodem no <b>mesmo notebook</b> do grupo, onde estão as fontes da Aula 7, e salvem a resposta como arquivo <code>.md</code>.") +
+    prompt("""
+        Atue como analista de requisitos de software do setor público. Com base em TODAS as fontes e conversas deste notebook,
+        escreva o documento "contexto.md" do projeto [NOME DO SISTEMA] em Markdown, com EXATAMENTE estas seções:
+
+        1. Visão geral: o problema (dor) em 1 frase com número, o setor da SESP-MT e a solução proposta.
+        2. Objetivos e KPIs: 2 a 4 KPIs, cada um com baseline (hoje), meta e como medir.
+        3. Usuários e papéis: tabela Papel | Quem é na SESP | O que pode fazer | O que NÃO pode fazer (papéis A, E, L, X).
+        4. Fluxo To-Be: passos numerados, indicando qual papel executa cada passo e o que o sistema faz sozinho.
+        5. Entidades de dados: para cada entidade, tabela Campo | Tipo (texto, número, data, lista) | Obrigatório | Exemplo.
+        6. Regras de negócio: lista numerada RN01, RN02... (ex.: "RN03 - pedido acima de R$ 50 mil exige auditoria").
+        7. Dados sensíveis (LGPD): quais campos, classificação (pessoal/sensível) e técnica de proteção (máscara, hash, omitir).
+        8. Telas do MVP: nome da tela, objetivo, papel que usa, elementos principais (KPIs, gráfico, tabela, formulário).
+        9. Restrições técnicas: site estático no GitHub Pages, sem servidor e sem banco real, apenas dados sintéticos.
+        10. Fora do escopo do MVP: o que fica para depois.
+        11. Dúvidas em aberto: o que ainda não foi decidido pelo grupo.
+
+        Não invente informação: se algo não estiver nas fontes, escreva "A DEFINIR" no lugar.
+        """, "Prompt 1 melhorado — contexto.md", "Chat do NotebookLM") +
+    prompt("""
+        Atue como tech lead de um projeto de software. Com base no contexto do projeto [NOME DO SISTEMA] neste notebook,
+        gere o documento "sprint.md" em Markdown com o plano técnico de construção do MVP.
+
+        Stack obrigatória:
+        - Front-end: TypeScript + Vite, como PWA (vite-plugin-pwa), com rotas por hash (#/tela).
+        - JavaScript: apenas onde o Vite/PWA gerar (service worker, arquivos de configuração).
+        - Python 3.12: scripts de geração de dados sintéticos (saída em public/data/*.json), mascaramento LGPD e testes (pytest).
+        - Testes do front-end: Vitest.
+        - Hospedagem: GitHub Pages (site estático), com deploy automático por GitHub Actions a cada push na main.
+        - Sem servidor e sem banco de dados real: dados em JSON + armazenamento local no navegador (IndexedDB ou localStorage).
+
+        Gere 5 sprints (1 Fundação e dados, 2 Regras de negócio e papéis, 3 Telas, 4 PWA e homologação, 5 Deploy e documentação).
+        Para CADA sprint escreva:
+        - Objetivo (1 frase) e entregável demonstrável.
+        - Tarefas numeradas (S1.1, S1.2...), cada uma com: arquivos a criar ou alterar, linguagem, e critério de aceite testável.
+        - Testes da sprint (o que o Vitest ou o pytest deve verificar).
+        - Mensagem de commit sugerida no padrão Conventional Commits (feat:, fix:, test:, docs:, chore:).
+        Termine com uma "Definição de Pronto" do MVP em checklist.
+        """, "Prompt 2 melhorado — sprint.md", "Chat do NotebookLM") +
+    callout("note", "Já têm um sprint.md que pede servidor e banco de dados?",
+      "Muitos grupos receberam sprints com FastAPI/Flask, PostgreSQL ou login com senha. Não joguem fora: "
+      "a próxima Parte mostra como isso vira um site estático, e no Passo 4 da Sprint 0 há um prompt que pede "
+      "ao agente para reescrever o sprint.md para o GitHub Pages sem perder o que foi planejado.") +
+    callout("err", "LGPD vale aqui também",
+      "O NotebookLM é um serviço externo. Se alguma fonte do notebook tiver nome, CPF ou matrícula reais, "
+      "removam antes de gerar os arquivos. Os dois <code>.md</code> vão para um repositório <b>público</b> no GitHub.")
+)
+
+# =================================================================
+# PARTE 1
+# =================================================================
+grp("Parte 1 · O que dá para publicar",
+    "O GitHub Pages só entrega arquivos prontos. Aqui vocês veem como cada peça \"full stack\" do sprint.md vira um site estático, "
+    "qual o papel de cada linguagem e como organizar as pastas.")
+
+section("pages-estatico", "A verdade sobre \"full stack\" no GitHub Pages",
+    p("O GitHub Pages é gratuito e simples, mas tem uma regra que muda tudo: <b>ele só entrega arquivos prontos</b> "
+      "(HTML, CSS, JavaScript, imagens, JSON). Ele não executa Python, não tem banco de dados e não guarda nada "
+      "que o usuário digita. Cada parte \"full stack\" do sprint.md precisa ter um equivalente estático:") +
+    tbl(["O que o sprint.md pede", "Como fica no MVP do GitHub Pages", "Linguagem"],
+        [["Backend / API (FastAPI, Flask, Node)", "Uma camada <code>src/services/</code> em TypeScript que lê JSON, com a mesma \"cara\" de uma API", "TS"],
+         ["Banco de dados (PostgreSQL, MySQL)", "Arquivos <code>public/data/*.json</code> gerados por script Python, mais IndexedDB/localStorage para o que o usuário cadastra", "Python + TS"],
+         ["Geração de dados, ETL, relatórios", "Scripts em <code>scripts/*.py</code>, executados no computador e no GitHub Actions antes do build", "Python"],
+         ["Login e senha", "Seletor \"Ver como: Admin / Editor / Leitor / Aprovador\" (RBAC simulado, como combinado na Aula 7)", "TS"],
+         ["Logs de auditoria", "Registro local (quem, papel, ação, antes/depois, data/hora) com exportação em CSV", "TS"],
+         ["Mascaramento LGPD", "Feito no script Python <b>antes</b> de gerar o JSON: o dado completo nunca chega ao site", "Python"],
+         ["App de celular", "PWA: instalável pelo navegador e funcionando offline", "TS + JS (service worker)"],
+         ["Servidor de deploy", "GitHub Actions compila e publica sozinho a cada push", "YAML"]]) +
+    callout("err", "Regra de ouro: tudo no GitHub Pages é público",
+      "Qualquer pessoa pode abrir o código-fonte do site e baixar os JSON. Por isso: <b>nenhum dado real</b>, "
+      "<b>nenhuma senha</b>, <b>nenhuma chave de API</b> (nem de IA) no repositório. Se o agente sugerir colocar "
+      "uma chave no código, recusem.") +
+    ficha("p", "E o código de backend que vocês planejaram?",
+      "Ele pode continuar existindo como <b>evolução futura</b>. A camada <code>src/services/</code> é escrita contra uma "
+      "interface (ex.: <code>listarPedidos()</code>). Hoje ela lê JSON; amanhã, quando a SESP hospedar uma API de verdade, "
+      "troca-se só a implementação, e as telas não mudam. Isso se chama <b>padrão adaptador</b>.")
+)
+
+section("arquitetura", "A arquitetura do MVP: quem faz o quê",
+    p("Cada linguagem tem um papel claro. Guardem este quadro: ele responde metade das dúvidas sobre onde colocar cada código.") +
+    grid2([
+        ("🐍 Python: a \"fábrica de dados\"",
+         ul(["Gera dados sintéticos realistas (<code>scripts/gerar_dados.py</code>);",
+             "mascara campos sensíveis (LGPD) antes de salvar;",
+             "valida os dados com testes (<code>pytest</code>);",
+             "roda <b>antes</b> do build, nunca no navegador."])),
+        ("🔷 TypeScript: o aplicativo",
+         ul(["Tipos das entidades (<code>src/domain/tipos.ts</code>);",
+             "regras de negócio RN01, RN02… (<code>src/domain/regras.ts</code>);",
+             "papéis e permissões, auditoria, telas;",
+             "testado com <code>Vitest</code>."])),
+        ("🟨 JavaScript: a cola do PWA",
+         ul(["Service worker (gerado pelo <code>vite-plugin-pwa</code>);",
+             "arquivos de build em <code>dist/</code>;",
+             "o TypeScript vira JavaScript no build: o navegador só executa JS."])),
+        ("⚙️ GitHub: versão e publicação",
+         ul(["Repositório: histórico de tudo (commits);",
+             "Actions: roda Python, testes e build a cada push;",
+             "Pages: entrega o site em <code>https://usuario.github.io/repo/</code>."])),
+    ]) +
+    flow_h([("🐍", "gerar_dados.py<br>→ public/data"), ("🔷", "TypeScript<br>lê os JSON"), ("🧪", "Vitest + pytest<br>testam"),
+            ("📦", "vite build<br>→ dist/"), ("🌐", "GitHub Pages<br>publica dist/")])
+)
+
+section("estrutura-pastas", "A estrutura de pastas do repositório",
+    p("Peçam ao agente para seguir esta estrutura desde o primeiro dia. Com ela, qualquer colega (e o próprio agente) "
+      "sabe onde procurar cada coisa.") +
+    code(f"""
+        {REPO}/
+        ├── docs/
+        │   ├── contexto.md            ← vindo do NotebookLM
+        │   ├── sprint.md              ← vindo do NotebookLM
+        │   └── REGRAS-DO-PROJETO.md   ← regras que o agente segue sempre
+        ├── scripts/                   ← PYTHON
+        │   ├── gerar_dados.py         ← dados sintéticos → public/data/*.json
+        │   └── test_gerar_dados.py    ← pytest: LGPD e consistência
+        ├── public/
+        │   ├── data/                  ← JSON gerados (não editar à mão)
+        │   ├── icon.svg               ← ícone-fonte do PWA
+        │   └── pwa-192x192.png ...    ← ícones gerados
+        ├── src/                       ← TYPESCRIPT
+        │   ├── domain/                ← tipos.ts, regras.ts (+ regras.test.ts)
+        │   ├── auth/                  ← papeis.ts (RBAC simulado)
+        │   ├── services/              ← api.ts, auditoria.ts, armazenamento.ts
+        │   ├── pages/                 ← uma tela por arquivo (painel.ts, pedidos.ts...)
+        │   ├── components/            ← pedaços reutilizáveis (kpiCard.ts...)
+        │   ├── router.ts              ← rotas por hash: #/painel, #/pedidos
+        │   ├── main.ts
+        │   └── style.css
+        ├── .github/workflows/deploy.yml   ← GitHub Actions → GitHub Pages
+        ├── index.html
+        ├── vite.config.ts             ← base: '/{REPO}/' + PWA
+        ├── package.json               ← scripts: dev, build, test
+        ├── requirements.txt           ← dependências Python
+        ├── .gitignore                 ← node_modules, dist, .venv
+        └── README.md
+        """, "estrutura") +
+    callout("note", "O que NUNCA vai para o GitHub",
+      "<code>node_modules/</code> (centenas de MB, reinstalável com <code>npm ci</code>), <code>dist/</code> (gerado pelo build), "
+      "<code>.venv/</code> (ambiente Python local) e qualquer arquivo com dado real. O <code>.gitignore</code> cuida disso: "
+      "confiram que ele existe <b>antes</b> do primeiro commit.")
+)
+
+# =================================================================
+# PARTE 2
+# =================================================================
+grp("Parte 2 · Trabalhando com o agente",
+    "Como escrever um prompt que o agente acerta de primeira, o ciclo curto de cada tarefa e as regras de segurança do grupo.")
+
+section("anatomia-prompt", "Anatomia de um bom prompt de desenvolvimento",
+    p("Na Aula 8 vocês viram os 4 princípios de prompt (papel, contexto, formato, iteração). Para programar, "
+      "acrescentem mais dois: <b>restrições</b> e <b>critério de pronto</b>. Todo prompt deste caderno segue esta receita:") +
+    tbl(["Parte", "O que escrever", "Exemplo"],
+        [["1. Contexto", "Citar os arquivos com <code>@</code> para o agente ler", "\"Leia @docs/contexto.md e @docs/sprint.md\""],
+         ["2. Tarefa", "UMA tarefa, com o código da sprint", "\"Execute a tarefa S2.3 (cálculo do status do pedido)\""],
+         ["3. Onde", "Arquivos a criar ou alterar", "\"Crie src/domain/regras.ts; não altere outros arquivos\""],
+         ["4. Restrições", "Stack, estilo, o que é proibido", "\"TypeScript estrito, sem bibliotecas novas, sem dados reais\""],
+         ["5. Pronto quando", "Como verificar que funcionou", "\"npm test passa e a tela #/painel mostra 4 KPIs\""],
+         ["6. Formato da resposta", "O que o agente deve devolver", "\"Primeiro o plano; espere meu OK antes de codar\""]]) +
+    prompt("""
+        Contexto: leia @docs/contexto.md, @docs/sprint.md e @docs/REGRAS-DO-PROJETO.md.
+        Tarefa: execute a tarefa [S?.?] do sprint.md: [DESCRIÇÃO CURTA].
+        Onde: crie/altere somente [ARQUIVOS]. Não mexa em outros arquivos.
+        Restrições: TypeScript estrito; sem bibliotecas novas sem me perguntar; somente dados sintéticos.
+        Pronto quando: [CRITÉRIO VERIFICÁVEL, ex.: npm test passa e a tela X mostra Y].
+        Resposta: primeiro me mostre o plano em tópicos e a lista de arquivos. Só escreva código depois do meu "OK".
+        """, "Modelo universal (copie e preencha)") +
+    ficha("a", "O @ é o superpoder",
+      "Ao digitar <code>@</code> na caixa do painel Agent, o Antigravity lista os arquivos do projeto. Mencionar o "
+      "arquivo garante que o agente leia a versão atual dele, em vez de adivinhar. Sempre mencionem o "
+      "<code>contexto.md</code> quando a tarefa envolver regra de negócio ou dado.")
+)
+
+section("ciclo-tarefa", "O ciclo de cada tarefa: planejar → gerar → testar → commitar",
+    p("O erro nº 1 com agentes de IA é pedir a sprint inteira de uma vez. O agente gera 30 arquivos, algo quebra, e "
+      "ninguém sabe onde. Trabalhem em <b>ciclos curtos</b>: uma tarefa do sprint.md por ciclo, com um commit no final.") +
+    flow_h([("📋", "1. Pedir<br>o plano"), ("✅", "2. Aprovar ou<br>corrigir"), ("🤖", "3. Agente<br>gera o código"),
+            ("▶️", "4. Rodar<br>e testar"), ("🔍", "5. Revisar<br>o diff"), ("💾", "6. Commit<br>+ push")]) +
     step([
-        ("Contexto importado do NotebookLM", "Abra o <b>contexto.md</b> que você gerou no NotebookLM e tenha-o visível no Antigravity (abra como arquivo)."),
-        ("Sprints definidas no NotebookLM", "Abra o <b>sprint.md</b> com as sprints técnicas em JS/TS/Python PWA. Ele é o seu roteiro de execução."),
-        ("Conta no GitHub", "Você precisa de uma conta em <b>github.com</b>. Sem ela não é possível publicar."),
-        ("Antigravity conectado ao GitHub", "Se ainda não conectou, volte ao caderno do Dia 6 e siga a seção 'Conectar GitHub'.")
+        ("Pedir o plano", "Use o modelo universal. Se o seu Antigravity mostrar os modos <b>Planning</b> e <b>Fast</b> no painel do agente, "
+         "use <b>Planning</b> em tarefas novas: ele devolve um plano para você aprovar antes de mexer nos arquivos."),
+        ("Aprovar ou corrigir", "Leiam o plano em grupo. Ele cita arquivos que não deveria? Inventou uma regra que não está no contexto.md? Corrijam antes."),
+        ("Gerar", "O agente escreve o código. Quando ele pedir para rodar um comando no terminal, <b>leiam o comando antes de aprovar</b>."),
+        ("Rodar e testar", "<code>npm run dev</code> para ver a tela, <code>npm test</code> para os testes. Se der erro, copiem o erro inteiro para o agente (ver prompts de depuração)."),
+        ("Revisar o diff", "No painel Source Control (Aula 6), cliquem em cada arquivo alterado: verde = linha nova, vermelho = linha removida. Algo estranho? Perguntem ao agente \"por que você mudou isto?\"."),
+        ("Commit + push", "Uma mensagem por tarefa: <code>feat(pedidos): calcula status do pedido (S2.3)</code>. Depois, <b>Sync/Push</b>."),
     ]) +
-    callout("tip", "Dica", "Se você não tem certeza se o Antigravity está conectado ao GitHub, clique no ícone do painel de Controle do Código-Fonte (escaneie o QR code visual) e veja se aparece o nome do seu repositório.")
+    callout("tip", "Regra dos 3 testes (Aula 7) antes do commit",
+      "<b>R</b>oda? (sem erro no terminal e no console do navegador) · <b>C</b>olega entende? (alguém do grupo explica o que o "
+      "código faz) · <b>T</b>este? (existe pelo menos um teste que prova que funciona). Faltou um: não commitem ainda.")
 )
 
-# ─── PARTE 1 ─────────────────────────────────────────────────────────────────
-grp("Parte 1 · Do NotebookLM ao Antigravity")
-
-section("prompt-contexto-melhorado", "O Prompt de Contexto — Versão Técnica Aprimorada",
-    p("O prompt que você usou no NotebookLM provavelmente gerou um resumo amplo. "
-      "Agora vamos torná-lo mais preciso para extrair informações que o agente de IA "
-      "consegue transformar diretamente em código.") +
-    callout("note", "Prompt melhorado para contexto", "Copie e cole no NotebookLM (nova conversa) para gerar um contexto mais técnico e estruturado:") +
-    code(["Análise de Requisitos Técnicos — MVP", "", "# Contexto do Projeto", "# O problema que o sistema resolve", "# Personas principais e suas necessidades", "# Dados que o sistema manipula (entidades e campos)", "# Regras de negócio críticas", "# Interfaces principais (telas e fluxos)", "# Integração com sistemas externos", "# Requisitos não-funcionais (performance, segurança, acessibilidade)", "", "# Formato de saída", "Responda em português. Para cada seção, seja específico: nomes de entidades,", "tipos de dados, validações e critérios de aceite mensuráveis.", "Evite descrições vagas. Prefira tabelas e listas a parágrafos."], "txt") +
-    callout("tip", "Por que recarregar?", "O NotebookLM original pode ter perdido o thread da conversa. "
-      "Uma nova conversa com um prompt mais técnico gera um contexto mais útil para o agente de IA.")
+section("regras-agente", "Regras de segurança ao trabalhar com o agente",
+    tbl(["Situação", "O que fazer"],
+        [["O agente quer rodar <code>rm</code>, <code>del</code>, <code>git reset --hard</code>, <code>--force</code> ou <code>--overwrite</code>", "<b>Recusem</b> e perguntem por quê. Esses comandos apagam trabalho."],
+         ["O agente alterou arquivos que não tinham nada a ver com a tarefa", "No Source Control, descartem as mudanças desses arquivos (<b>Discard Changes</b>) e repitam o pedido dizendo \"altere somente X\"."],
+         ["O agente quer instalar uma biblioteca nova", "Perguntem: \"para que serve, qual a alternativa sem biblioteca, e ela funciona em site estático?\""],
+         ["O agente sugere colocar uma chave de API, senha ou token no código", "Recusem. No GitHub Pages tudo é público."],
+         ["Vocês precisam de um exemplo com dados", "Usem só dados sintéticos. Nunca colem planilha real da SESP no chat."],
+         ["A conversa ficou longa e o agente começou a \"esquecer\" coisas", "Abram uma conversa nova (<b>+</b> no painel Agent) e comecem citando os arquivos com @."],
+         ["O agente entrou em loop (erra, corrige, erra de novo)", "Parem. Voltem ao último commit bom (Discard Changes) e peçam uma abordagem diferente, mais simples."]]) +
+    ficha("r", "Tarefas grandes em branch separada",
+      "Antes de uma tarefa que mexe em muitos arquivos, criem uma branch (ex.: <code>sprint-3-telas</code>). Se der errado, "
+      "a <code>main</code> e o site no ar continuam intactos. Detalhes na seção de versionamento.")
 )
 
-section("prompt-sprints-melhorado", "O Prompt de Sprints — Versão Técnica com GitHub Pages",
-    p("O sprint.md original pediu sprints em JS/TS/Python PWA. Vamos aprimorar para que "
-      "cada sprint inclua também o target de publicação no GitHub Pages e a estrutura de branches.") +
-    callout("note", "Prompt melhorado para sprints", "Cole no NotebookLM (mesma conversa do contexto, ou nova):") +
-    code(['Gere sprints de execução técnica para o MVP com as seguintes características:', '', 'Stack: TypeScript (Vite) + JavaScript + Python (PWA com service worker)', 'Hospedagem: GitHub Pages (subcaminho /nome-do-repo/)', 'Versionamento: Git com branches (main + feature/*)', '', 'Formato para cada sprint:', '1. Nome e objetivo principal', '2. Entregas técnicas específicas (arquivos que serão criados/modificados)', '3. Critério de aceite (o que precisa estar funcionando ao final)', '4. Branch Git associada (ex: feature/setup-inicial)', '5. Target de deploy (ex: https://usuario.github.io/nome-repo/)', '', 'Considere: autenticação básica, CRUD de entidades principais,', 'dados sintéticos para mock, testes unitários com Vitest,'], "txt")
-)
+# =================================================================
+# PARTE 3 — SPRINT 0
+# =================================================================
+grp("Parte 3 · Sprint 0 — preparar o terreno",
+    "Instalar as ferramentas, criar o projeto sem perder o contexto.md e o sprint.md, publicar o repositório e fazer o agente "
+    "provar que entendeu o projeto.")
 
-section("o-que-e-mvp", "O que é um MVP e por que PWA?",
-    aplicab(
-        "Quando você precisa validar uma ideia com dados reais e usuários de verdade, sem gastar meses em desenvolvimento.",
-        "Um MVP (Minimum Viable Product) é a menor versão de um produto que entrega valor real. PWA (Progressive Web App) permite que rodem como app no celular sem passar por loja de aplicativos.",
-        "O Portal de Pedidos de Compra da SESP: o MVP mostra os pedidos por status, com filtros e totais, em uma URL que qualquer servidor acessa pelo celular."
-    ) +
-    kpi([
-        ("< 2 sem", "para subir o MVP"),
-        ("PWA", "roda offline + home screen"),
-        ("GitHub Pages", "hostagem gratuita"),
-        ("Vitest", "testes em ms"),
-    ])
-)
-
-# ─── PARTE 2 ─────────────────────────────────────────────────────────────────
-grp("Parte 2 · A stack técnica — validada e explicada")
-
-section("stack-escolhida", "A stack do MVP: por que cada peça?",
-    tbl(["Tecnologia", "Papel no MVP", "Alternativa"],
-        [["Vite (vanilla-ts)", "Build tool e dev server. Compila TS → JS e empacota para o navegador.", "webpack, parcel"],
-         ["TypeScript", "Superconjunto de JS com tipos. Reduz erros em tempo de desenvolvimento.", "JS puro"],
-         ["Vitest", "Framework de testes unitários. Roda no Node, rápido (subsegundo).", "Jest, Mocha"],
-         ["vite-plugin-pwa", "Gera service worker, manifesto e ícones PWA automaticamente.", "workbox manual"],
-         ["Python (scripts)", "Gera dados sintéticos (faker) e executa checks de LGPD.", "Nodefaker, chance"],
-         ["GitHub Actions", "CI/CD: testa, compila e publica no GitHub Pages a cada push.", "CircleCI, Travis"]],
-        num_cols=[0])
-)
-
-section("arquitetura-pwa", "Arquitetura do projeto — como tudo se conecta",
-    flow_h([
-        ("📄", "contexto.md\nsprint.md"), ("\u27a4", ""),
-        ("🤖", "Antigravity\nAgent"), ("\u27a4", ""),
-        ("📁", "src/\ndomain/"), ("\u27a4", ""),
-        ("⚙️", "Vite\nbuild"), ("\u27a4", ""),
-        ("🌐", "GitHub\nPages"),
-    ]) +
-    tbl(["Camada", "O que fica aqui", "Arquivos典型icos"],
-        [["Dados", "JSON estático em public/data/. Gere com script Python.", "pedidos.json, usuarios.json"],
-         ["Domínio", "Regras de negócio puras, sem dependência de framework.", "regras.ts, entidades.ts"],
-         ["Serviços", "Chamadas à API (fetch), autenticação.", "api.ts, auth.ts"],
-         ["UI", "Componentes de apresentação, rotas (hash-based).", "main.ts, dashboard.ts"],
-         ["Infraestrutura", "Config de build, CI/CD, manifesto PWA.", "vite.config.ts, .github/workflows/"],
-         ["Scripts", "Geração de dados sintéticos, verificações LGPD.", "scripts/gerar_dados.py"]],
-        num_cols=[])
-)
-
-section("branch-model", "Modelo de branches — o fluxo Git que você vai seguir",
-    callout("note", "Regra de ouro", "Cada sprint = uma branch feature. O merge na main só acontece após testes verdes no CI.") +
-    flow_h([
-        ("⬛", "main\n(produção)"),
-        ("\u27a4", ""), ("🟢", "feature/\nsetup-inicial"),
-        ("\u27a4", ""), ("🟡", "feature/\ndados-sinteticos"),
-        ("\u27a4", ""), ("🔵", "feature/\ncrud-pedidos"),
-        ("\u27a4", ""), ("🟣", "feature/\npwa-offline"),
-        ("\u27a4", ""), ("⬛", "main\n(deploy)"),
-    ]) +
-    glossary([
-        ("main", "Branch principal. Código que está em produção (no ar no GitHub Pages). Só recebe merge quando tudo está testado."),
-        ("feature/*", "Branch para cada sprint. Ex: feature/setup-inicial, feature/crud-pedidos. Criada a partir da main."),
-        ("workflow_dispatch", "Gatilho manual no GitHub Actions. Permite publicar mesmo sem push, usando o botão 'Run workflow'."),
-    ])
-)
-
-# ─── PARTE 3 ─────────────────────────────────────────────────────────────────
-grp("Parte 3 · Setup do projeto — passo a passo completo")
-
-section("passo-criar-repositorio", "Passo 1 — Criar o repositório no GitHub",
+section("instalar", "Passo 1 — Instalar Node.js e Python (e conferir o Git)",
+    p("O Git vocês instalaram na Aula 6. Agora faltam duas ferramentas: o <b>Node.js</b>, que roda o TypeScript, o Vite e os "
+      "testes, e o <b>Python</b>, que roda os scripts de dados.") +
     step([
-        ("Acesse github.com/new", "Clique em <b>New repository</b>. Dê um nome curto e claro (ex: <code>mvp-pedidos-sesp</code>). Marque <b>Public</b> para ativar GitHub Pages gratuito."),
-        ("Não inicialize", "Deixe todas as caixinhas de 'Add README', '.gitignore', etc. deschecadas. Vamos preencher na mão."),
-        ("Copie a URL do repositório", "Guarde a URL HTTPS (ex: <code>https://github.com/seu-usuario/mvp-pedidos-sesp.git</code>) — você vai usá-la no Antigravity."),
+        ("Node.js (versão LTS)", "Baixe em <b>nodejs.org</b> o instalador <b>LTS</b> para Windows e avance com as opções padrão. "
+         "Ele instala junto o <code>npm</code>, o gerenciador de pacotes."),
+        ("Python 3.12 ou mais novo", "Baixe em <b>python.org/downloads</b>. Na primeira tela do instalador, <b>marque \"Add python.exe to PATH\"</b> "
+         "antes de clicar em Install Now.", "Esqueceu de marcar? Rode o instalador de novo, escolha Modify e marque a opção."),
+        ("Feche e reabra o Antigravity", "O terminal só \"enxerga\" os programas novos depois de reaberto."),
+        ("Confira no terminal", "Abra o terminal do Antigravity (<b>Terminal → New Terminal</b>) e rode os comandos abaixo. Cada um deve responder com um número de versão."),
     ]) +
-    callout("tip", "Nome do repo = base path", "Se o repo se chama <code>mvp-pedidos-sesp</code>, a URL do site será "
-      "<code>https://seu-usuario.github.io/mvp-pedidos-sesp/</code>. Anote o nome — você vai precisar dele no <code>vite.config.ts</code>.")
+    code("""
+        node -v            # ex.: v22.x ou v24.x
+        npm -v             # ex.: 10.x ou 11.x
+        python --version   # ex.: Python 3.12.x
+        git --version      # ex.: git version 2.x
+        """, "terminal") +
+    callout("err", "Erro: \"npm.ps1 não pode ser carregado porque a execução de scripts foi desabilitada\"",
+      "É uma proteção do PowerShell no Windows. Rode uma vez só o comando abaixo e responda <b>S</b>. Depois feche e reabra o terminal." +
+      code("Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned", "powershell")) +
+    callout("err", "Erro: \"python\" abre a Microsoft Store",
+      "O Windows tem um atalho falso do Python. Vá em <b>Configurações → Aplicativos → Configurações avançadas de aplicativos → "
+      "Aliases de execução de aplicativo</b> e desligue <i>python.exe</i> e <i>python3.exe</i>. Ou use <code>py</code> no lugar de <code>python</code>.")
 )
 
-section("passo-scaffold", "Passo 2 — Scaffold do projeto (sem perder seus arquivos)",
-    callout("r", "Atenção — pasta não vazia?", "Se a sua pasta já tem <code>contexto.md</code> e <code>sprint.md</code>, o Vite vai recusar criar o projeto nela. "
-      "Siga o caminho alternativo abaixo.") +
-    lab("Caminho normal (pasta vazia)", step([
-        ("Crie o projeto", "No terminal (PowerShell) dentro da pasta do projeto:",
-         "npm create vite@latest . -- --template vanilla-ts --overwrite"),
-        ("Instale dependências", "npm install"),
-        ("Instale os plugins PWA e testes", "npm i -D vite-plugin-pwa vitest"),
-        ("Gere ícones PWA", "npm i -D @vite-pwa/assets-generator\nnpx pwa-assets-generator --preset minimal-2023 public/icon.svg"),
-    ])) +
-    lab("Caminho alternativo (pasta com contexto.md e sprint.md)", step([
-        ("Crie em uma subpasta temporária", "cd ..\nnpm create vite@latest mvp-temp -- --template vanilla-ts\nmv mvp-temp/* mvp-temp/.* . 2>/dev/null; rmdir mvp-temp"),
-        ("Mova seus arquivos de contexto", "Os arquivos <code>contexto.md</code> e <code>sprint.md</code> precisam existir. Se foram movidos, traga-os de volta."),
-        ("Instale as dependências", "npm install\nnpm i -D vite-plugin-pwa vitest @vite-pwa/assets-generator"),
-    ]))
-)
-
-section("passo-config-vite", "Passo 3 — Configurar o vite.config.ts",
-    p("O <code>vite.config.ts</code> é o arquivo mais importante do projeto. "
-      "Ele define o caminho base (o nome do seu repo) e ativa o PWA.") +
-    code(["import { defineConfig } from 'vite'", "import { VitePWA } from 'vite-plugin-pwa'", "", "// \u270f  TROQUE PELO NOME DO SEU REPOSIT\u00d3RIO NO GITHUB", "const REPO = 'mvp-pedidos-sesp'", "", "export default defineConfig({",
-         "  base: `/${REPO}/`,", "  plugins: [",
-         "    VitePWA({", "      registerType: 'autoUpdate',",
-         "      includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],",
-         "      manifest: {",
-         "        name: 'Portal de Pedidos \u2014 SESP/MT (MVP)',",
-         "        short_name: 'Pedidos SESP',",
-         "        description: 'MVP acad\u00eamico com dados sint\u00e9ticos \u2014 Curso SESP/MT',",
-         "        lang: 'pt-BR',",
-         "        theme_color: '#1f4b8f',",
-         "        background_color: '#ffffff',",
-         "        display: 'standalone',",
-         "        start_url: '.',",
-         "        scope: '.',",
-         "        icons: [",
-         "          { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },",
-         "          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },",
-         "          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },",
-         "          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },",
-         "        ],",
-         "      },", "      workbox: { globPatterns: ['**/*.{js,css,html,svg,png,ico,json}'] },",
-         "    }),", "  ],", "})"], "ts") +
-    callout("err", "Erro mais comum", "Esquecer de trocar <code>REPO</code> faz o site abrir em branco no GitHub Pages. "
-      "O caminho base precisa ser <b>exatamente</b> o nome do repositório.")
-)
-
-section("passo-config-scripts", "Passo 4 — Scripts npm e arquivo de ícone",
-    p("Adicione os scripts de teste e geração de ícones ao <code>package.json</code>:") +
-    code(["npm pkg set scripts.test='vitest run'", "npm pkg set scripts.icones='pwa-assets-generator --preset minimal-2023 public/icon.svg'"], "bash") +
-    p("Crie o ícone SVG na pasta <code>public/</code> (exemplo com as iniciais do seu projeto):") +
-    code(['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">',
-         '<rect width="512" height="512" rx="96" fill="#1f4b8f"/>',
-         '<text x="256" y="330" font-family="Arial" font-size="220" font-weight="700" fill="#fff" text-anchor="middle">PC</text>',
-         '</svg>'], "xml") +
-    p("Salve como <code>public/icon.svg</code>. Depois execute:") +
-    code(["npm run icones"], "bash")
-)
-
-# ─── PARTE 4 ─────────────────────────────────────────────────────────────────
-grp("Parte 4 · Estrutura de código e dados sintéticos")
-
-section("estrutura-src", "Passo 5 — A estrutura de pastas src/",
-    callout("note", "Regra结构性", "A pasta <code>src/</code> só tem código que roda no navegador. "
-      "Dados estáticos vão sempre em <code>public/data/</code>. Scripts Python ficam em <code>scripts/</code>.") +
-    code(["src/", "  domain/", "    regras.ts          # regras de neg\u00f3cio puras", "    regras.test.ts      # testes das regras",
-         "    entidades.ts        # interfaces TypeScript",
-         "  auth/", "    Papeis.ts             # Roles e permiss\u00f5es",
-         "    auth.test.ts",
-         "  services/", "    api.ts               # chamadas \u00e0 API (fetch)",
-         "  main.ts              # ponto de entrada + router hash",
-         "public/",
-         "  data/", "    pedidos.json          # dados sint\u00e9ticos (gerados pelo Python)",
-         "  icon.svg",
-         "  pwa-*.png             # \u00edcones gerados",
-         "scripts/",
-         "  gerar_dados.py        # faker + verifica\u00e7\u00e3o LGPD",
-         "  test_gerar_dados.py  # pytest"], "bash")
-)
-
-section("script-python-dados", "Passo 6 — Gerar dados sintéticos com verificação LGPD",
-    p("O script Python cria dados realistas para o MVP. Ele mascara CPFs automaticamente "
-      "e é executado tanto localmente quanto no CI do GitHub Actions.") +
-    code(['"""Gera dados SINT\u00c9TICOS para o MVP. Nenhum dado real da SESP.\nCPF sempre mascarado antes de sair daqui (LGPD)."""',
-         "import json, pathlib, random",
-         "from datetime import date, timedelta",
-         "from typing import NamedTuple",
-         "",
-         "random.seed(42)  # reprodut\u00edvel",
-         "SAIDA = pathlib.Path(__file__).resolve().parent.parent / 'public' / 'data'",
-         "SAIDA.mkdir(parents=True, exist_ok=True)",
-         "",
-         "UNIDADES = ['Setor de Compras', 'Controladoria', 'Gabinete', 'DIRETORIA de TI']",
-         "STATUS = ['rascunho', 'enviado', 'em_cotacao', 'em_auditoria', 'aprovado', 'devolvido']",
-         "",
-         "def mascara_cpf(cpf: str) -> str:",
-         "    return f\'***.{cpf[3:6]}.***-**\'",
-         "",
-         "pedidos = []",
-         "for i in range(1, 121):",
-         "    pedidos.append({",
-         "        'id': i,",
-         "        'protocolo': f\'PC-2026-{i:04d}\',",
-         "        'unidade': random.choice(UNIDADES),",
-         "        'solicitante_cpf': mascara_cpf(gerar_cpf_valido()),",
-         "        'valor_estimado': round(random.uniform(800, 95_000), 2),",
-         "        'status': random.choice(STATUS),",
-         "        'aberto_em': (date(2026, 1, 2) + timedelta(days=random.randint(0, 240))).isoformat(),",
-         "    })",
-         "(SAIDA / 'pedidos.json').write_text(json.dumps(pedidos, ensure_ascii=False, indent=2))",
-         "print(f\'OK: {len(pedidos)} pedidos em {SAIDA}\')"], "python") +
-    callout("tip", "pytest no CI", "O workflow do GitHub Actions executa <code>python -m pytest -q scripts</code> "
-      "para garantir que nenhum CPF foi exposto no JSON gerado.")
-)
-
-section("codigo-dominio", "Passo 7 — Regras de negócio em TypeScript (domínio puro)",
-    code(["export interface Pedido {", "  id: number",
-         "  protocolo: string", "  unidade: string",
-         "  solicitante_cpf: string", "  valor_estimado: number",
-         "  status: 'rascunho' | 'enviado' | 'em_cotacao' | 'em_auditoria' | 'aprovado' | 'devolvido'",
-         "  aberto_em: string", "}",
-         "", "/** Valor acima do qual o pedido exige auditoria da Controladoria */",
-         "export const LIMITE_AUDITORIA = 50_000",
-         "",
-         "export function exigeAuditoria(pedido: Pedido): boolean {",
-         "  return pedido.valor_estimado > LIMITE_AUDITORIA",
-         "}",
-         "",
-         "export function totalPorStatus(pedidos: Pedido[]): Record<string, number> {",
-         "  return pedidos.reduce<Record<string, number>>((acc, p) => {",
-         "    acc[p.status] = (acc[p.status] ?? 0) + 1",
-         "    return acc",
-         "  }, {})",
-         "}"], "ts") +
-    callout("note", "Por que domínio separado?", "Isolar as regras permite testar sem precisar de um navegador, "
-      "um servidor ou dados reais. Qualquer pessoa da equipe consegue rodar <code>npm test</code> e verificar se as regras estão corretas.")
-)
-
-section("testes-vitest", "Passo 8 — Testes unitários com Vitest",
-    p("Os testes validam as regras de negócio em milissegundos, sem precisar abrir o navegador. "
-      "O CI do GitHub Actions exige que todos os testes passem antes de publicar.") +
-    code(["import { describe, it, expect } from 'vitest'", "import { exigeAuditoria, totalPorStatus, type Pedido } from './regras'",
-         "", "const base: Pedido = { id: 1, protocolo: 'PC-2026-0001', unidade: 'Compras',",
-         "  solicitante_cpf: '***.123.***-**', valor_estimado: 1000,",
-         "  status: 'enviado', aberto_em: '2026-03-01',", "}",
-         "", "describe('regras de neg\u00f3cio', () => {",
-         "  it('pedido acima de R$ 50 mil exige auditoria', () => {",
-         "    expect(exigeAuditoria({ ...base, valor_estimado: 50_000.01 })).toBe(true)",
-         "    expect(exigeAuditoria({ ...base, valor_estimado: 50_000 })).toBe(false)",
-         "  })",
-         "  it('conta pedidos por status', () => {",
-         "    const r = totalPorStatus([base, base, { ...base, status: 'aprovado' }])",
-         "    expect(r).toEqual({ enviado: 2, aprovado: 1 })",
-         "  })",
-         "})"], "ts") +
-    code(["npm test"], "bash") +
-    callout("tip", "O que falha no CI?", "Se qualquer teste falhar, o GitHub Actions impede o deploy. "
-      "Isso protege você de publicar código quebrado no ar.")
-)
-
-# ─── PARTE 5 ─────────────────────────────────────────────────────────────────
-grp("Parte 5 · GitHub Actions — deploy automático")
-
-section("workflow-deploy", "Passo 9 — O workflow .github/workflows/deploy.yml",
-    p("O workflow é o 'fio terra' entre o seu código e o site no ar. "
-      "A cada push na branch <code>main</code>, ele executa: Python (dados + pytest) → Node (testes + build) → GitHub Pages.") +
-    code(["name: Deploy no GitHub Pages", "", "on:", "  push:", "    branches: [main]",
-         "  workflow_dispatch:", "  # permite acionar manualmente na aba Actions", "",
-         "permissions:", "  contents: read", "  pages: write", "  id-token: write", "",
-         "concurrency:", "  group: pages", "  cancel-in-progress: true", "",
-         "jobs:", "  build:", "    runs-on: ubuntu-latest",
-         "    steps:", "      - uses: actions/checkout@v7",
-         "",
-         "      - name: Python \u2014 gerar dados e verificar LGPD",
-         "        uses: actions/setup-python@v7",
-         "        with: { python-version: '3.12' }",
-         "      - run: pip install -r requirements.txt",
-         "      - run: python scripts/gerar_dados.py",
-         "      - run: python -m pytest -q scripts",
-         "",
-         "      - name: Node \u2014 instalar, testar e compilar",
-         "        uses: actions/setup-node@v7",
-         "        with: { node-version: '22' }",
-         "      - run: npm ci",
-         "      - run: npm test",
-         "      - run: npm run build",
-         "",
-         "      - uses: actions/configure-pages@v6",
-         "      - uses: actions/upload-pages-artifact@v5",
-         "        with: { path: dist }",
-         "",
-         "  deploy:", "    needs: build",
-         "    runs-on: ubuntu-latest",
-         "    environment:",
-         "      name: github-pages",
-         "      url: ${{ steps.deployment.outputs.page_url }}",
-         "    steps:",
-         "      - id: deployment",
-         "        uses: actions/deploy-pages@v5"], "yaml")
-)
-
-section("ativar-github-pages", "Passo 10 — Ativar GitHub Pages no repositório",
+section("criar-projeto", "Passo 2 — Criar o projeto e trazer o contexto.md e o sprint.md",
+    p("Vamos criar o esqueleto do aplicativo com o <b>Vite</b>, a ferramenta que roda o TypeScript no navegador durante o desenvolvimento "
+      "e gera a versão final para publicar. O nome da pasta será o nome do repositório e o final do endereço do site, então escolham bem: "
+      "<b>minúsculas, sem espaço, sem acento</b>, palavras separadas por hífen.") +
     step([
-        ("Configurar no GitHub", "No seu repositório, vá em <b>Settings → Pages → Source</b> e selecione <b>GitHub Actions</b>. Não é mais necessário escolher branch — o workflow controla isso."),
-        ("Adicionar requirements.txt", "Crie um arquivo <code>requirements.txt</code> na raiz do projeto com apenas: <code>pytest</code> (sem versão, para pegar a última)."),
+        ("Abra o terminal na pasta onde ficam seus projetos", "Ex.: <code>D:\\Dev</code>. No terminal: <code>cd D:\\Dev</code>"),
+        ("Crie o projeto", "Rode o comando abaixo, trocando pelo nome do projeto de vocês. <code>vanilla-ts</code> = TypeScript puro, sem framework.",
+         "Se o sprint.md de vocês definiu React, troquem por <code>react-ts</code>. Todo o resto do caderno funciona igual."),
+        ("Instale as dependências", "Entre na pasta e rode <code>npm install</code>. Demora 1 a 2 minutos na primeira vez."),
+        ("Traga os dois arquivos do NotebookLM", "Crie a pasta <code>docs</code> dentro do projeto e <b>mova</b> para ela o <code>contexto.md</code> e o <code>sprint.md</code>."),
+        ("Abra a pasta no Antigravity", "<b>File → Open Folder</b> e escolham a pasta do projeto. Na barra lateral devem aparecer <code>docs/</code>, <code>src/</code>, <code>index.html</code>, <code>package.json</code>."),
+        ("Teste", "Rode <code>npm run dev</code> e abram o endereço que aparecer (ex.: <code>http://localhost:5173/</code>). Apareceu a página de boas-vindas do Vite? O terreno está pronto. <code>Ctrl+C</code> no terminal para parar."),
     ]) +
-    callout("tip", "workflow_dispatch", "Com esse gatilho, você pode acionar o deploy manualmente "
-      "pela aba <b>Actions</b> do repositório, sem precisar dar push. Útil quando você quer verificar "
-      "o build antes de abrir uma PR.")
+    code(f"""
+        cd D:\\Dev
+        npm create vite@latest {REPO} -- --template vanilla-ts
+        cd {REPO}
+        npm install
+        mkdir docs
+        # mova contexto.md e sprint.md para a pasta docs/ (no Explorer do Antigravity: arrastar e soltar)
+        npm run dev
+        """, "terminal") +
+    callout("err", "Não criem o projeto Vite dentro da pasta onde já estão o contexto.md e o sprint.md",
+      "Numa pasta que já tem arquivos, o criador do Vite cancela. Se o agente sugerir a opção <code>--overwrite</code>, <b>ela apaga "
+      "os arquivos que já estão lá</b>, incluindo os dois .md. Por isso o caminho seguro é: criar o projeto numa pasta nova e só "
+      "depois mover os arquivos para dentro dela.") +
+    prompt(f"""
+        Estou no Windows, com o terminal na pasta D:\\Dev. Quero criar um projeto Vite com TypeScript chamado {REPO}.
+        Me diga os comandos, um por vez, e explique em 1 linha o que cada um faz. Não use --overwrite e não apague nenhum arquivo.
+        """, "Prefere que o agente conduza?")
 )
 
-section("primeiro-deploy", "Passo 11 — Seu primeiro deploy",
+section("publicar-repo", "Passo 3 — Versionar e publicar o repositório no GitHub",
+    p("Agora que a pasta existe, ela vira um repositório Git publicado no GitHub, com o mesmo fluxo do Laboratório 1 da Aula 6.") +
     step([
-        ("Commit e push iniciais", "No Antigravity, painel Git: Stage All → Commit (mensagem: 'feat: setup inicial do MVP') → Push."),
-        ("Acompanhe o Actions", "Acesse a aba <b>Actions</b> do repositório. Você verá o workflow rodando: amarela (running) → verde (sucesso)."),
-        ("Acesse o site", "Quando o job 'deploy' terminar, o link aparecerá em <b>Settings → Pages</b>: <code>https://seu-usuario.github.io/mvp-pedidos-sesp/</code>."),
+        ("Confira o .gitignore", "O Vite já cria um <code>.gitignore</code> com <code>node_modules</code> e <code>dist</code>. Acrescentem no final as linhas do bloco abaixo, para o Python."),
+        ("Inicialize e publique", "No painel <b>Source Control</b>, clique em <b>Publish to GitHub</b> e escolha <b>Public repository</b>. "
+         "O GitHub Pages gratuito exige repositório público.", "Se aparecer \"Initialize Repository\" primeiro, clique nele, faça o primeiro commit e depois publique."),
+        ("Primeiro commit", "Mensagem: <code>chore: estrutura inicial do projeto (Vite + TS) e documentos do NotebookLM</code>."),
+        ("Confira no GitHub", f"Abra <code>https://github.com/SEU-USUARIO/{REPO}</code>: devem aparecer <code>docs/</code>, <code>src/</code> e os arquivos do Vite, mas <b>não</b> a pasta <code>node_modules</code>."),
     ]) +
-    callout("note", "Tempo de propagação", "Pode levar até 2 minutos para o site aparecer após o deploy terminar. "
-      "Se der erro 404, aguarde e recarregue. Se persistir por mais de 5 minutos, verifique o log do Actions.")
+    code("""
+        # Python
+        .venv/
+        __pycache__/
+        *.pyc
+        .pytest_cache/
+        """, ".gitignore (acrescentar)") +
+    callout("note", "Um repositório por grupo",
+      "Um integrante cria e publica. Os demais entram como colaboradores: <b>Settings → Collaborators → Add people</b> no GitHub. "
+      "Depois cada um clona (Aula 6, Cenário A) e roda <code>npm install</code> na própria máquina.")
 )
 
-# ─── PARTE 6 ─────────────────────────────────────────────────────────────────
-grp("Parte 6 · Prompts de exemplo — um para cada sprint do MVP")
-
-section("prompts-sprint0", "Sprint 0 (Setup) — Prompts para o agente",
-    callout("note", "Como usar", "Cole cada prompt no painel Agent do Antigravity. "
-      "Substitua os termos entre colchetes pelo que faz sentido para o seu projeto específico.") +
-    ficha("g", "Prompt A — Configurar o projeto do zero",
-      '<code>Crie uma estrutura de projeto Vite com vanilla TypeScript. Instale e configure o plugin PWA (vite-plugin-pwa) com manifest para PWA instalável. Configure o base path como "/nome-do-repo/" (substitua pelo nome real). Adicione Vitest como dependência de desenvolvimento.</code>') +
-    ficha("a", "Prompt B — Gerar o ícone e ícones PWA",
-      '<code>Usando a ferramenta pwa-assets-generator com preset minimal-2023, gere todos os ícones PWA (64x64, 192x192, 512x512 e maskable) a partir do arquivo public/icon.svg.</code>') +
-    ficha("p", "Prompt C — Primeira estrutura de arquivos",
-      '<code>Crie a seguinte estrutura de pastas dentro de src/: domain/ (com entidades.ts e regras.ts), auth/ (com Papeis.ts e uma função pode(acao, papel)), services/ (com api.ts usando fetch e BASE_URL do import.meta.env). Para o campo status use union type literal.</code>')
+section("primeiro-prompt", "Passo 4 — O primeiro prompt: o agente lê o contexto e o sprint.md",
+    p("Antes de escrever qualquer linha de código, façam o agente <b>provar que entendeu</b> o projeto. Esse prompt não gera código: "
+      "gera um diagnóstico para vocês conferirem.") +
+    prompt("""
+        Leia com atenção @docs/contexto.md e @docs/sprint.md. NÃO escreva código ainda.
+        Me devolva, em Markdown:
+        1. O problema e a solução em 3 linhas, com as suas palavras.
+        2. A lista de telas do MVP e qual papel (Admin, Editor, Leitor, Aprovador) usa cada uma.
+        3. As entidades de dados com seus campos e tipos, em formato de tabela.
+        4. As regras de negócio que você identificou, numeradas (RN01, RN02...).
+        5. Os campos sensíveis (LGPD) e como devem ser mascarados.
+        6. Uma tabela "item do sprint.md | como fica num site estático no GitHub Pages", apontando o que precisa ser adaptado.
+        7. Contradições ou lacunas entre os dois arquivos e as perguntas que você faria ao grupo antes de começar.
+        """, "Prompt 0.1 — Diagnóstico do projeto") +
+    p("Leiam a resposta em grupo. Respondam às perguntas do item 7 e, se o item 6 apontou adaptações, peçam a versão ajustada do plano:") +
+    prompt("""
+        Com as respostas abaixo, reescreva o @docs/sprint.md adaptado para o GitHub Pages (site estático):
+        - Backend/API vira a camada src/services em TypeScript lendo public/data/*.json.
+        - Banco de dados vira JSON gerado por scripts/gerar_dados.py (Python) + IndexedDB/localStorage para cadastros.
+        - Login vira seletor de papel (RBAC simulado).
+        Mantenha a numeração das tarefas (S1.1, S1.2...) e acrescente em cada tarefa: arquivos, linguagem e critério de aceite.
+        Salve em docs/sprint.md e me mostre um resumo do que mudou.
+        Respostas do grupo: [COLE AQUI AS RESPOSTAS ÀS PERGUNTAS DO ITEM 7]
+        """, "Prompt 0.2 — Adaptar o sprint.md ao GitHub Pages") +
+    callout("tip", "Commit desta etapa", "<code>docs: diagnóstico do agente e sprint.md adaptado ao GitHub Pages</code>")
 )
 
-section("prompts-sprint1", "Sprint 1 (Dados) — Prompts para o agente",
-    ficha("g", "Prompt A — Script Python de dados sintéticos",
-      '<code>Escreva um script Python completo em scripts/gerar_dados.py que: (1) use pathlib e json da stdlib; (2) use random com seed 42 para reprodutibilidade; (3) gere 120 pedidos com campos: id, protocolo (formato PC-2026-XXXX), unidade (escolha entre 5 opções), solicitante_cpf (gere CPF válido e aplique máscara ***.XXX.***-**), valor_estimado (entre 800 e 95000), status (escolha aleatório entre 6 opções), aberto_em (data entre 2026-01-02 e 2026-09-01); (4) grave em public/data/pedidos.json com indent=2 e ensure_ascii=False.</code>') +
-    ficha("a", "Prompt B — Teste de segurança LGPD",
-      '<code>Escreva um teste pytest em scripts/test_gerar_dados.py que: (1) execute o script gerar_dados.py via subprocess; (2) leia o arquivo public/data/pedidos.json; (3) verifique com regex que nenhum CPF completo (formato XXX.XXX.XXX-XX) está presente no arquivo; (4) afirme que o JSON contém exatamente 120 registros.</code>') +
-    ficha("p", "Prompt C — Interface TypeScript da entidade",
-      '<code>Com base nos dados do JSON, escreva a interface TypeScript Pedido em src/domain/entidades.ts com todos os campos e seus tipos exatos. Em src/domain/regras.ts escreva: LIMITE_AUDITORIA = 50000, função exigeAuditoria(pedido: Pedido): boolean, e função totalPorStatus(pedidos: Pedido[]): Record&lt;string, number&gt;.</code>')
+section("regras-projeto", "Passo 5 — O arquivo de regras do projeto (a \"memória\" do agente)",
+    p("O agente não lembra das conversas anteriores quando vocês abrem uma nova. A solução é um arquivo com as regras "
+      "permanentes do projeto, mencionado com <code>@</code> nos prompts. Peçam para o agente criá-lo:") +
+    prompt("""
+        Crie o arquivo docs/REGRAS-DO-PROJETO.md com as regras permanentes deste projeto, baseadas em @docs/contexto.md e @docs/sprint.md.
+        Inclua, em tópicos curtos:
+        - Stack: Vite + TypeScript estrito, PWA com vite-plugin-pwa, Python 3.12 só em scripts/, testes com Vitest e pytest.
+        - Hospedagem: GitHub Pages, site estático. Base do Vite: '/[NOME-DO-REPO]/'. Rotas por hash (#/tela).
+        - Caminhos de dados sempre com import.meta.env.BASE_URL, nunca "/data/..." fixo.
+        - Estrutura de pastas: src/domain, src/auth, src/services, src/pages, src/components, scripts, public/data.
+        - Dados: somente sintéticos; CPF e nomes sempre mascarados no Python antes de gerar o JSON.
+        - Proibido: dados reais, senhas, chaves de API, bibliotecas novas sem aprovação, apagar arquivos sem pedir.
+        - Código e comentários em português; nomes de variáveis em português sem acento (ex.: valorEstimado).
+        - Cada tarefa termina com testes passando e uma sugestão de mensagem de commit (Conventional Commits).
+        - Glossário do domínio: [TERMOS DO PROJETO, ex.: pedido, cotação, auditoria].
+        Máximo de 1 página.
+        """, "Prompt 0.3 — Criar as regras do projeto") +
+    ficha("a", "Como usar daqui para frente",
+      "Comecem toda conversa nova com: <i>\"Leia @docs/REGRAS-DO-PROJETO.md e @docs/contexto.md antes de qualquer coisa.\"</i> "
+      "Se o agente desobedecer uma regra, respondam citando a regra. Se o Antigravity de vocês tiver a opção de "
+      "<b>regras do workspace</b> nas configurações do agente, podem colar o conteúdo lá também.")
 )
 
-section("prompts-sprint2", "Sprint 2 (CRUD) — Prompts para o agente",
-    ficha("g", "Prompt A — Serviço de API",
-      '<code>Em src/services/api.ts escreva uma função assíncrona listarPedidos(): Promise&lt;Pedido[]&gt; que use fetch para carregar /data/pedidos.json (use BASE_URL do import.meta.env). Trate erros com throw new Error e texto em português.</code>') +
-    ficha("a", "Prompt B — Renderização de lista",
-      '<code>Em src/main.ts escreva uma função renderLista(pedidos: Pedido[]) que: (1) receba o array de pedidos; (2) monte uma tabela HTML com colunas Protocolo, Unidade, Status, Valor, Aberto em; (3) use Intl.NumberFormat para formatar valores em BRL; (4) use mapeamento de cor por status (rascunho=cinza, enviado=azul, em_cotacao=ambar, em_auditoria=roxo, aprovado=verde, devolvido=vermelho); (5) insira no #app.</code>') +
-    ficha("p", "Prompt C — Router hash e integração",
-      '<code>Em src/main.ts: (1) use window.addEventListener(\'hashchange\', render) para detectar navegação; (2) default para #/lista; (3) importe e chame listarPedidos, depois renderLista; (4) se fetch falhar, mostre mensagem de erro no #app; (5) exporte a função para poder ser testada.</code>')
+section("config-base", "Passo 6 — Configurar o Vite para o GitHub Pages (o \"base\")",
+    p(f"O site de vocês não vai ficar na raiz do domínio, mas numa subpasta: <code>https://usuario.github.io/<b>{REPO}</b>/</code>. "
+      "Se o Vite não souber disso, o site publicado abre <b>em branco</b>, porque procura os arquivos no lugar errado. É o erro mais comum de todos.") +
+    code(f"""
+        import {{ defineConfig }} from 'vite'
+
+        // Troque pelo nome EXATO do seu repositório no GitHub (maiúsculas e minúsculas importam)
+        const REPO = '{REPO}'
+
+        export default defineConfig({{
+          base: `/${{REPO}}/`,
+        }})
+        """, "vite.config.ts") +
+    p("E, em todo lugar que o código buscar um arquivo de dados, usem o <code>BASE_URL</code> que o Vite preenche sozinho:") +
+    code("""
+        // ✗ ERRADO: funciona no computador, quebra no GitHub Pages
+        const resp = await fetch('/data/pedidos.json')
+
+        // ✓ CERTO: vira /mvp-pedidos-compra/data/pedidos.json no site publicado
+        const resp = await fetch(`${import.meta.env.BASE_URL}data/pedidos.json`)
+        """, "ts") +
+    prompt("""
+        Crie o arquivo vite.config.ts com base: '/[NOME-DO-REPO]/' para publicar no GitHub Pages.
+        Depois procure em todo o src/ qualquer fetch ou caminho que comece com "/" e troque para usar import.meta.env.BASE_URL.
+        Me mostre a lista do que alterou.
+        """, "Prompt 0.4 — Configurar o base") +
+    callout("tip", "Commit", "<code>chore: configura base do Vite para o GitHub Pages</code>")
 )
 
-section("prompts-sprint3", "Sprint 3 (Autenticação e Permissões) — Prompts para o agente",
-    ficha("g", "Prompt A — Sistema de papéis",
-      '<code>Em src/auth/Papeis.ts: (1) defina tipo Papel como \'ADMIN\' | \'EDITOR\' | \'LEITOR\' | \'APROVADOR\'; (2) tipo Acao como \'ver\' | \'criar\' | \'editar\' | \'excluir\' | \'aprovar\' | \'ver_log\'; (3) tabela PERMISSOES mapeando cada Papel ao array de Ações que pode executar; (4) função pode(papel: Papel, acao: Acao): boolean que retorna true se a ação está no array.</code>') +
-    ficha("a", "Prompt B — Testes de permissão",
-      '<code>Em src/auth/auth.test.ts escreva 4 testes com Vitest: (1) ADMIN pode tudo exceto ver_log? (não); (2) LEITOR não pode editar; (3) APROVADOR pode aprovar mas não pode editar; (4) EDITOR não pode excluir nem ver_log.</code>') +
-    ficha("p", "Prompt C — Middleware de rota",
-      '<code>Escreva uma função verificarPermissao(papel: Papel, acao: Acao): void que lance Error com mensagem \'Acesso negado: [acao] não permitida para [papel]\' se pode() retornar false. Exporte como verificar from \'../auth/Papeis.ts\'.</code>')
+# =================================================================
+# PARTE 4 — SPRINTS
+# =================================================================
+grp("Parte 4 · Construindo sprint a sprint",
+    "Dados sintéticos em Python, regras de negócio em TypeScript, telas, PWA, homologação e deploy automático. "
+    "Cada sprint tem os prompts prontos, o gabarito do que conferir e as mensagens de commit.")
+
+section("mapa-sprints", "O mapa das 5 sprints do MVP",
+    p("As sprints abaixo seguem a sugestão da Aula 7, adaptadas para TS + Python + PWA no GitHub Pages. "
+      "Se o sprint.md de vocês tem outra divisão, vale o de vocês: usem os prompts das próximas seções como modelo, "
+      "trocando os códigos das tarefas.") +
+    sprint(1, "Sprint 1 · Fundação e dados", "Python + TS · entregável: JSON sintéticos gerados e tipos definidos",
+           ["Tipos das entidades em <code>src/domain/tipos.ts</code>;", "<code>scripts/gerar_dados.py</code> com dados sintéticos e máscara LGPD;",
+            "testes pytest garantindo que nenhum dado sensível sai sem máscara."]) +
+    sprint(2, "Sprint 2 · Regras de negócio, papéis e auditoria", "TS · entregável: regras testadas com Vitest",
+           ["Camada <code>src/services/api.ts</code> lendo os JSON;", "regras RN01, RN02… em <code>src/domain/regras.ts</code>;",
+            "RBAC simulado (<code>src/auth/papeis.ts</code>) e log de auditoria local."]) +
+    sprint(3, "Sprint 3 · Telas e navegação", "TS + CSS · entregável: telas navegáveis no npm run dev",
+           ["Rotas por hash, layout responsivo;", "painel com KPIs e gráfico, lista com filtros, formulário com validação;",
+            "teste dos 5 segundos (o KPI principal salta aos olhos)."]) +
+    sprint(4, "Sprint 4 · PWA e homologação", "TS + JS · entregável: app instalável, offline e revisado",
+           ["<code>vite-plugin-pwa</code>, manifesto e ícones;", "testes por papel, varredura LGPD, Lighthouse;",
+            "revisão de código pelo agente e pelo grupo."]) +
+    sprint(5, "Sprint 5 · Deploy e documentação", "YAML + Markdown · entregável: link público funcionando",
+           ["GitHub Actions publicando no GitHub Pages a cada push;", "README com roadmap, transparência de IA e LGPD;",
+            "tag <code>v1.0.0</code> e o pitch de 3 minutos."])
 )
 
-section("prompts-sprint4", "Sprint 4 (PWA Offline) — Prompts para o agente",
-    callout("note", "Prerequisite", "O vite-plugin-pwa já foi configurado no Passo 3. "
-      "Estes prompts ajustam o service worker para funcionar offline com os dados do projeto.") +
-    ficha("g", "Prompt A — Cache de dados estáticos",
-      '<code>No vite.config.ts, na seção workbox do VitePWA, configure: globPatterns para incluir public/data/*.json. Adicione runtimeCaching com Strategy: \'CacheFirst\' para URLs que terminam em .json, com cacheName: \'dados-json\', e expiration maxEntries: 50, maxAgeSeconds: 86400 (1 dia).</code>') +
-    ficha("a", "Prompt B — Indicador de modo offline",
-      '<code>Em src/main.ts: (1) escute window.addEventListener(\'offline\', ...) para adicionar classe \'offline\' ao body; (2) escute \'online\' para remover; (3) no CSS: body.offline #app::before { content: \'⚠️ Modo offline — dados em cache\'; display:block; background: var(--ambar); color: white; padding: 8px; text-align: center; font-size: 13px; }</code>') +
-    ficha("p", "Prompt C — Registro manual do SW (se necessário)",
-      '<code>Se o VitePWA não registrar automaticamente (alguns navegadores), escreva em src/sw-register.ts: if (\'serviceWorker\' in navigator) { window.addEventListener(\'load\', () => navigator.serviceWorker.register(\'/nome-do-repo/sw.js\')); } e importe no main.ts.</code>')
+section("s1-dados", "Sprint 1 — Modelagem e dados sintéticos com Python",
+    aplicab("Primeira sprint: antes de qualquer tela.",
+            "Tela sem dado não se testa. Com dados sintéticos realistas, vocês veem o painel \"vivo\" desde o início.",
+            "120 pedidos de compra com protocolo, unidade, valor, status e CPF do solicitante mascarado.") +
+    h3("1.1 · Tipos das entidades (TypeScript)") +
+    prompt("""
+        Leia @docs/REGRAS-DO-PROJETO.md e a seção de entidades de @docs/contexto.md.
+        Tarefa S1.1: crie src/domain/tipos.ts com uma interface TypeScript para cada entidade (ex.: Pedido, Unidade, Cotacao).
+        - Use tipos union para campos de lista fechada (ex.: status: 'rascunho' | 'enviado' | 'aprovado').
+        - Datas como string ISO (AAAA-MM-DD).
+        - Comente cada campo em 1 linha, em português.
+        Pronto quando: npx tsc --noEmit roda sem erros.
+        """, "Prompt S1.1 — Tipos") +
+    h3("1.2 · Ambiente Python (uma vez por computador)") +
+    code("""
+        python -m venv .venv
+        .venv\\Scripts\\Activate.ps1     # o terminal passa a mostrar (.venv) no começo da linha
+        pip install pytest
+        pip freeze > requirements.txt
+        """, "terminal") +
+    h3("1.3 · Script gerador de dados sintéticos") +
+    prompt("""
+        Leia @docs/REGRAS-DO-PROJETO.md, @docs/contexto.md e @src/domain/tipos.ts.
+        Tarefa S1.2: crie scripts/gerar_dados.py (Python 3.12, somente biblioteca padrão) que gera dados SINTÉTICOS
+        e grava um JSON por entidade em public/data/ (ex.: public/data/pedidos.json).
+        Requisitos:
+        - random.seed(42) para os dados serem sempre os mesmos (reprodutível).
+        - Os campos do JSON devem ter EXATAMENTE os mesmos nomes das interfaces de tipos.ts.
+        - Volume: [QUANTIDADE, ex.: 120 pedidos] distribuídos ao longo de 2026.
+        - Realismo de Mato Grosso: unidades e municípios reais (Cuiabá, Várzea Grande, Rondonópolis...), valores plausíveis.
+        - Inclua casos de borda: [EX.: 5 pedidos acima de R$ 50 mil, 3 devolvidos, 2 com campo opcional vazio].
+        - CPF: gere CPF matematicamente válido e grave SOMENTE mascarado no formato ***.123.***-** (LGPD).
+        - Nomes de pessoas: use nomes fictícios ou só a função (ex.: "Solicitante 014").
+        - json.dumps com ensure_ascii=False e encoding utf-8.
+        - No final, imprima quantos registros gerou por arquivo.
+        Pronto quando: python scripts/gerar_dados.py roda e os arquivos aparecem em public/data/.
+        """, "Prompt S1.2 — Gerador de dados") +
+    p("Um trecho do que o script deve ter, para vocês conferirem na revisão:") +
+    code("""
+        random.seed(42)  # mesma semente = mesmos dados sempre
+
+        def mascarar_cpf(cpf: str) -> str:
+            return f"***.{cpf[3:6]}.***-**"
+
+        pedidos.append({
+            "protocolo": f"PC-2026-{i:04d}",
+            "unidade": random.choice(UNIDADES),
+            "solicitante_cpf": mascarar_cpf(cpf_valido()),   # nunca o CPF completo
+            "valor_estimado": round(random.uniform(800, 95000), 2),
+            "status": random.choice(STATUS),
+        })
+        """, "python") +
+    h3("1.4 · Teste de LGPD com pytest") +
+    prompt("""
+        Tarefa S1.3: crie scripts/test_gerar_dados.py com pytest que:
+        1. executa scripts/gerar_dados.py;
+        2. falha se encontrar em qualquer arquivo de public/data/ um CPF completo (regex de 11 dígitos, com ou sem pontuação);
+        3. confere a quantidade de registros e que todo registro tem os campos obrigatórios de @src/domain/tipos.ts;
+        4. confere as regras de borda que pedi (ex.: existem pedidos acima de R$ 50 mil).
+        Pronto quando: python -m pytest -q scripts mostra todos os testes passando.
+        """, "Prompt S1.3 — Teste LGPD") +
+    code("""
+        python scripts/gerar_dados.py
+        python -m pytest -q scripts
+        """, "terminal") +
+    callout("tip", "Commits da Sprint 1",
+      "<code>feat(dominio): tipos das entidades (S1.1)</code> · <code>feat(dados): gerador de dados sintéticos (S1.2)</code> · "
+      "<code>test(lgpd): garante CPF mascarado nos JSON (S1.3)</code>")
 )
 
-section("prompts-sprint5", "Sprint 5 (Visualização e Dashboard) — Prompts para o agente",
-    ficha("g", "Prompt A — KPI cards",
-      '<code>Em src/dashboard/kpis.ts: (1) função calcularKPIs(pedidos: Pedido[]) que retorna objeto com total de pedidos, total de valores (formatado BRL), quantidade que exige auditoria, percentual de aprovados; (2) função renderizarKPIs(kpis) que monte 4 cards HTML (classe .kpi-card) e insira no elemento passado como parâmetro.</code>') +
-    ficha("a", "Prompt B — Gráfico de barras (vanilla JS + SVG)",
-      '<code>Em src/dashboard/graficos.ts: (1) função renderizarBarras(dados: { label: string; valor: number }[], containerId: string) que: gere SVG inline com rects proporcionais ao valor máximo; (2)labels em texto abaixo das barras; (3) valores acima das barras; (4) use CSS vars para cores.</code>') +
-    ficha("p", "Prompt C — Filtros por status",
-      '<code>Em src/dashboard/filtros.ts: (1) função renderizarFiltros(onChange: (status: string[]) => void) que gere botões/toogle buttons para cada status único; (2) escute click para marcar/desmarcar; (3) chame onChange passando array de status ativos; (4) estilize com CSS .filtro-btn.active { background: var(--accent); color: white }.</code>')
+section("s2-logica", "Sprint 2 — Regras de negócio, papéis e auditoria em TypeScript",
+    p("Esta sprint é o \"backend\" do MVP, rodando no navegador. A regra de ouro: <b>regra de negócio não fica dentro de tela</b>. "
+      "Ela fica em funções puras em <code>src/domain/</code>, fáceis de testar.") +
+    h3("2.1 · A camada de serviços (a \"API\" do MVP)") +
+    prompt("""
+        Leia @docs/REGRAS-DO-PROJETO.md e @src/domain/tipos.ts.
+        Tarefa S2.1: crie src/services/api.ts com funções assíncronas que imitam uma API REST:
+        listarPedidos(), obterPedido(id), listarUnidades() [AJUSTE PARA AS ENTIDADES DO PROJETO].
+        - Leia os JSON com fetch(`${import.meta.env.BASE_URL}data/<arquivo>.json`).
+        - Trate erro de rede com mensagem clara em português.
+        - Guarde em memória o que já foi carregado (não buscar o mesmo JSON duas vezes).
+        - Escreva as funções contra uma interface FonteDeDados, para no futuro trocar JSON por uma API real sem mudar as telas.
+        """, "Prompt S2.1 — Serviços") +
+    h3("2.2 · Regras de negócio com teste") +
+    prompt("""
+        Leia as regras de negócio (RN01, RN02...) em @docs/contexto.md.
+        Tarefa S2.2: implemente cada regra como função pura em src/domain/regras.ts (sem acessar tela nem fetch).
+        Crie src/domain/regras.test.ts com Vitest: pelo menos 2 testes por regra, incluindo o caso de limite
+        (ex.: exatamente R$ 50.000,00 NÃO exige auditoria; R$ 50.000,01 exige).
+        Adicione ao package.json o script "test": "vitest run" e instale o vitest como devDependency.
+        Pronto quando: npm test mostra todos os testes passando. Me mostre a saída.
+        """, "Prompt S2.2 — Regras + Vitest") +
+    code("""
+        export const LIMITE_AUDITORIA = 50000
+
+        /** RN03 — pedido acima de R$ 50 mil exige auditoria da Controladoria */
+        export function exigeAuditoria(p: Pedido): boolean {
+          return p.valor_estimado > LIMITE_AUDITORIA
+        }
+        """, "ts") +
+    h3("2.3 · Papéis e permissões (RBAC simulado)") +
+    prompt("""
+        Leia a tabela de papéis em @docs/contexto.md.
+        Tarefa S2.3: crie src/auth/papeis.ts com:
+        - type Papel = 'ADMIN' | 'EDITOR' | 'LEITOR' | 'APROVADOR' e type Acao = 'ver' | 'criar' | 'editar' | 'excluir' | 'aprovar' | 'ver_log';
+        - uma tabela de permissões por papel, igual à do contexto.md;
+        - função pode(papel, acao): boolean;
+        - papel atual guardado no localStorage, com getPapelAtual() e setPapelAtual().
+        Crie testes Vitest que conferem cada linha da tabela de permissões.
+        Deixe claro em comentário que isto é uma SIMULAÇÃO para demonstração, não segurança real.
+        """, "Prompt S2.3 — Papéis") +
+    h3("2.4 · Log de auditoria e armazenamento local") +
+    prompt("""
+        Tarefa S2.4: crie src/services/auditoria.ts que registra cada ação relevante
+        (criar, editar, excluir, aprovar) com: dataHora ISO, papel, acao, entidade, id, valorAntes, valorDepois.
+        - Guarde no IndexedDB (sem biblioteca externa) ou, se for mais simples, no localStorage. Explique a escolha.
+        - Função exportarCsv() que baixa o log como arquivo .csv (separador ;, UTF-8 com BOM para abrir certo no Excel).
+        - O log não pode ser apagado pelo papel que gerou a ação (regra da Aula 7).
+        Crie também src/services/armazenamento.ts para salvar os pedidos criados/editados pelo usuário,
+        mesclando com os dados do JSON na hora de listar.
+        """, "Prompt S2.4 — Auditoria") +
+    callout("tip", "Commits da Sprint 2",
+      "<code>feat(api): camada de serviços sobre JSON (S2.1)</code> · <code>feat(regras): RN01–RN0X com testes (S2.2)</code> · "
+      "<code>feat(auth): RBAC simulado (S2.3)</code> · <code>feat(auditoria): log local com exportação CSV (S2.4)</code>")
 )
 
-# ─── PARTE 7 ─────────────────────────────────────────────────────────────────
-grp("Parte 7 · Fluxo completo — do commit ao ar")
+section("s3-telas", "Sprint 3 — Telas, painel e navegação",
+    p("Agora o MVP ganha cara. Lembrem das aulas de visualização: <b>título que diz a conclusão</b>, eixo começando no zero, "
+      "cor com significado (vermelho = crítico, verde = meta), nada de pizza 3D.") +
+    h3("3.1 · Rotas e layout") +
+    prompt("""
+        Leia @docs/REGRAS-DO-PROJETO.md e a lista de telas em @docs/contexto.md.
+        Tarefa S3.1: crie src/router.ts com rotas por hash (#/painel, #/pedidos, #/pedidos/novo, #/auditoria) [AJUSTE ÀS TELAS].
+        - Rota inicial: #/painel. Rota desconhecida: tela "Página não encontrada" com link para o painel.
+        - Layout com cabeçalho (nome do sistema + seletor "Ver como: [papel]"), menu e área de conteúdo.
+        - Cada tela em um arquivo de src/pages/ exportando uma função render(container).
+        - Esconder do menu as telas que o papel atual não pode ver (use pode() de src/auth/papeis.ts).
+        - CSS em src/style.css, mobile first, cores com variáveis CSS, contraste AA.
+        Por que hash: o GitHub Pages não conhece rotas como /pedidos e devolveria erro 404 ao recarregar a página.
+        """, "Prompt S3.1 — Rotas e layout") +
+    h3("3.2 · O painel do gestor") +
+    prompt("""
+        Tarefa S3.2: crie src/pages/painel.ts, a tela principal para o [PAPEL, ex.: Secretário].
+        - 4 cartões de KPI no topo, com os KPIs de @docs/contexto.md (valor grande + rótulo + comparação com a meta).
+        - 1 gráfico de barras com Chart.js (instale chart.js) mostrando [MÉTRICA POR CATEGORIA], eixo Y começando em zero,
+          título que afirma a conclusão (ex.: "Compras concentra 40% dos pedidos em atraso").
+        - 1 tabela com os 10 itens que exigem atenção (ex.: aguardando auditoria há mais de 5 dias).
+        - Tudo calculado com as funções de src/domain/regras.ts (nada de cálculo solto na tela).
+        Pronto quando: em até 5 segundos alguém de fora do grupo diz qual é o indicador principal.
+        """, "Prompt S3.2 — Painel") +
+    h3("3.3 · Lista com filtros e formulário") +
+    prompt("""
+        Tarefa S3.3: crie src/pages/pedidos.ts com a lista de [ENTIDADE]:
+        busca por texto, filtros por [CAMPOS, ex.: unidade e status], ordenação por coluna e paginação de 20 em 20.
+        Os filtros ficam na URL (ex.: #/pedidos?status=aprovado) para o link poder ser compartilhado.
+        Botões Editar/Excluir/Aprovar aparecem somente se pode(papelAtual, acao) for verdadeiro.
+        """, "Prompt S3.3 — Lista") +
+    prompt("""
+        Tarefa S3.4: crie src/pages/formulario.ts para criar e editar [ENTIDADE].
+        - Validação em português ao sair do campo e ao salvar (obrigatórios, valores mínimos, datas coerentes).
+        - Campos sensíveis com máscara visual (ex.: CPF exibido como ***.123.***-**).
+        - Ao salvar: grava via src/services/armazenamento.ts e registra no log de auditoria.
+        - Acessibilidade: label em todo campo, navegação completa por teclado, mensagem de erro ligada ao campo (aria-describedby).
+        """, "Prompt S3.4 — Formulário") +
+    callout("note", "Viu algo feio? Mostre para o agente",
+      "Tirem um print da tela (<code>Win+Shift+S</code>) e colem no painel Agent com o pedido: <i>\"Nesta tela, o cartão de KPI está "
+      "cortado no celular. Corrija somente o CSS em src/style.css.\"</i> Imagem + pedido específico funcionam muito melhor que descrever.") +
+    callout("tip", "Commits da Sprint 3",
+      "<code>feat(ui): rotas por hash e layout (S3.1)</code> · <code>feat(painel): KPIs e gráfico (S3.2)</code> · "
+      "<code>feat(pedidos): lista com filtros (S3.3)</code> · <code>feat(pedidos): formulário com validação (S3.4)</code>")
+)
 
-section("fluxo-diario", "O fluxo de trabalho que você vai repetir todo dia",
-    flow_h([
-        ("📋", "Criar/\nmudar branch"), ("\u27a4", ""), ("✏️", "Codar no\nAntigravity"),
-        ("\u27a4", ""), ("🧪", "npm test\n(local)"), ("\u27a4", ""), ("📤", "Commit\ne Push"),
-        ("\u27a4", ""), ("⚡", "CI roda\nautomático"), ("\u27a4", ""), ("🌐", "Site atualiza\nno ar"),
-    ]) +
+section("pwa", "Sprint 4a — Transformar em PWA (instalável e offline)",
+    p("PWA (<i>Progressive Web App</i>) é um site que se comporta como aplicativo: tem ícone na tela inicial do celular, abre em "
+      "tela cheia e funciona sem internet. Duas peças fazem isso: o <b>manifesto</b> (nome, ícones, cores) e o <b>service worker</b> "
+      "(um JavaScript que guarda os arquivos no aparelho). O plugin <code>vite-plugin-pwa</code> gera os dois.") +
     step([
-        ("Criar branch da sprint", "No painel Git do Antigravity: clique no nome da branch atual → 'Create branch' → nomeie como <code>feature/sprint-2-crud</code>."),
-        ("Desenvolver e testar localmente", "Execute <code>npm run dev</code> para ver o site em tempo real no navegador. Execute <code>npm test</code> para rodar os testes."),
-        ("Commitar com mensagem descritiva", "No painel Agent: 'Analise o que mudou e escreva uma mensagem de commit no conventional commits (feat:, fix:, docs:).' Revise e confirme."),
-        ("Push e aguarde o CI", "No painel Git: Sync → empurra a branch. O GitHub Actions começa automaticamente."),
-        ("Mergear na main (após aprovação)", "No GitHub: abra uma Pull Request, revise o diff, e clique em 'Merge'. O deploy acontece automaticamente após o merge."),
-    ])
-)
-
-section("ativar-pages-settings", "Configurar GitHub Pages (via Settings)",
-    step([
-        ("Acesse Settings do repositório", "No github.com, entre no repositório do seu MVP."),
-        ("Pages na barra lateral", "Clique em 'Pages' na barra lateral esquerda."),
-        ("Source", "Em 'Build and deployment', em 'Source', selecione <b>GitHub Actions</b>."),
+        ("Instale o plugin e o gerador de ícones", "Comandos no bloco logo abaixo."),
+        ("Crie o ícone-fonte", "Um arquivo <code>public/icon.svg</code> quadrado (peçam ao agente um SVG simples com as iniciais do sistema)."),
+        ("Gere os ícones PNG", "O gerador cria os tamanhos 64, 192, 512, o ícone \"maskable\" (Android), o do iPhone e o favicon."),
+        ("Configure o vite.config.ts", "Com o bloco completo abaixo."),
+        ("Teste", "<code>npm run build</code> e depois <code>npm run preview</code>. Abram o endereço mostrado, depois <b>F12 → Application → Manifest</b> "
+         "(ícones sem erro) e <b>Service Workers</b> (status <i>activated</i>). Na barra de endereço deve aparecer o botão de instalar."),
     ]) +
-    callout("tip", "Isso é só uma vez", "Feito isso, o workflow controla 100% dos deploys. "
-      "Você nunca mais precisa mexer nisso manualmente.")
+    code("""
+        npm install -D vite-plugin-pwa @vite-pwa/assets-generator
+        npx pwa-assets-generator --preset minimal-2023 public/icon.svg
+        """, "terminal") +
+    code(f"""
+        import {{ defineConfig }} from 'vite'
+        import {{ VitePWA }} from 'vite-plugin-pwa'
+
+        const REPO = '{REPO}'   // nome EXATO do repositório
+
+        export default defineConfig({{
+          base: `/${{REPO}}/`,
+          plugins: [
+            VitePWA({{
+              registerType: 'autoUpdate',
+              includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png'],
+              manifest: {{
+                name: 'Portal de Pedidos de Compra — SESP/MT (MVP)',
+                short_name: 'Pedidos SESP',
+                description: 'MVP acadêmico com dados sintéticos — Curso SESP/MT',
+                lang: 'pt-BR',
+                theme_color: '#1f4b8f',
+                background_color: '#ffffff',
+                display: 'standalone',
+                start_url: '.',
+                scope: '.',
+                icons: [
+                  {{ src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' }},
+                  {{ src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' }},
+                  {{ src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' }},
+                  {{ src: 'maskable-icon-512x512.png', sizes: '512x512',
+                    type: 'image/png', purpose: 'maskable' }},
+                ],
+              }},
+              workbox: {{
+                // inclui os JSON de public/data: o app abre offline com os dados
+                globPatterns: ['**/*.{{js,css,html,svg,png,ico,json}}'],
+              }},
+            }}),
+          ],
+        }})
+        """, "vite.config.ts (completo)") +
+    callout("note", "Por que start_url e scope são \".\"",
+      f"O ponto significa \"a pasta onde está o manifesto\", ou seja, <code>/{REPO}/</code>. Se colocarem <code>\"/\"</code>, "
+      "o app instalado abre a raiz de <code>github.io</code> e dá erro 404.") +
+    prompt("""
+        Leia @vite.config.ts e @docs/REGRAS-DO-PROJETO.md.
+        Tarefa S4.1: transforme o projeto em PWA com vite-plugin-pwa:
+        - manifest com name "[NOME COMPLETO]", short_name "[NOME CURTO até 12 letras]", lang pt-BR, theme_color [COR],
+          display standalone, start_url "." e scope "." (o site fica em subpasta do GitHub Pages);
+        - crie public/icon.svg (quadrado 512x512, fundo [COR], iniciais "[SIGLA]" em branco) e gere os PNG com
+          npx pwa-assets-generator --preset minimal-2023 public/icon.svg;
+        - service worker com registerType autoUpdate, cacheando também os JSON de public/data para funcionar offline;
+        - quando houver versão nova, mostrar um aviso discreto "Nova versão disponível — recarregar".
+        Pronto quando: npm run build && npm run preview abre o site, o DevTools mostra o manifesto sem erros e,
+        com a rede desligada (DevTools → Network → Offline), a página recarrega com os dados.
+        """, "Prompt S4.1 — PWA completo") +
+    callout("err", "Durante o desenvolvimento o service worker pode \"prender\" versões antigas",
+      "Se a tela não mudar depois de um build novo: <b>F12 → Application → Service Workers → Unregister</b> e <code>Ctrl+Shift+R</code>. "
+      "No celular com o app instalado: fechem e abram o app duas vezes (o <i>autoUpdate</i> troca a versão na segunda abertura).")
 )
 
-section("debug-deploy", "Depurando erros de deploy",
-    tbl(["Sintoma", "Causa mais provável", "Solução"],
-        [["Site abre em branco", "base path errado no vite.config.ts", "Verifique se REPO = 'nome-exato-do-repo' (sem / no final)"],
-         ["404 em /data/pedidos.json", "Falta gerar dados ou JSON vazio", "Execute python scripts/gerar_dados.py e commite o public/data/"],
-         ["Testes falham no CI mas passam localmente", "Inconsistência entreWindows e Linux (quebras de linha)", "Adicione .gitattributes com '* text=auto eol=lf'"],
-         ["workflow_dispatch não aparece", "Workflow não foi commitado na main ainda", "Faça push da branch main primeiro"],
-         ["deploy-pages falhou com permissões", "Pages não foi ativado em Settings", "Settings → Pages → Source: GitHub Actions"]],
-        num_cols=[])
+section("s4-testes", "Sprint 4b — Homologação: testes, LGPD e revisão",
+    p("Homologar é provar, antes do público ver, que o sistema faz o que o contexto.md promete. Quatro frentes:") +
+    tbl(["Frente", "Como verificar", "Ferramenta"],
+        [["Regras de negócio", "Todos os testes passando", "<code>npm test</code> (Vitest)"],
+         ["Dados e LGPD", "Nenhum dado sensível sem máscara nos JSON nem no site compilado", "<code>pytest</code> + prompt de varredura"],
+         ["Papéis", "Cada papel vê e faz só o que pode", "Roteiro manual (prompt abaixo)"],
+         ["Qualidade da página", "Desempenho, acessibilidade, boas práticas", "<b>F12 → Lighthouse</b> (meta: acima de 90)"]]) +
+    prompt("""
+        Leia @docs/contexto.md e @src/auth/papeis.ts.
+        Gere um roteiro de teste manual em docs/roteiro-homologacao.md: para cada papel (Admin, Editor, Leitor, Aprovador),
+        uma tabela Passo | Ação | Resultado esperado, cobrindo: telas visíveis, botões visíveis, criar, editar, aprovar,
+        excluir e ver o log. Inclua 3 casos de erro (ex.: Leitor tentando acessar #/pedidos/novo pela URL).
+        """, "Prompt S4.2 — Roteiro de testes por papel") +
+    prompt("""
+        Faça uma varredura de LGPD no projeto:
+        1. Rode npm run build e procure em dist/ e em public/data/ qualquer CPF completo, e-mail, telefone ou nome que pareça real.
+        2. Procure no código chaves de API, tokens, senhas ou URLs internas da SESP.
+        3. Confira se o README avisa que os dados são sintéticos.
+        Me devolva uma tabela Achado | Arquivo | Linha | Gravidade | Correção sugerida. Não corrija nada ainda.
+        """, "Prompt S4.3 — Varredura LGPD") +
+    prompt("""
+        Atue como revisor de código sênior. Revise os arquivos alterados nesta sprint (@src/domain, @src/pages, @src/services).
+        Procure: bugs, regra de negócio implementada diferente do @docs/contexto.md, cálculo feito dentro de tela,
+        texto sem acento ou em inglês para o usuário, acessibilidade (labels, contraste, teclado) e código duplicado.
+        Responda em tabela Problema | Arquivo:linha | Por que importa | Correção. Ordene do mais grave ao menos grave.
+        Não altere nada: eu escolho o que corrigir.
+        """, "Prompt S4.4 — Code review pelo agente") +
+    callout("tip", "Commits da Sprint 4",
+      "<code>feat(pwa): manifesto, ícones e offline (S4.1)</code> · <code>docs: roteiro de homologação (S4.2)</code> · "
+      "<code>fix: correções da revisão e da varredura LGPD (S4.3/S4.4)</code>")
 )
 
-# ─── PARTE 8 ─────────────────────────────────────────────────────────────────
-grp("Encerramento")
-
-section("checklist-final", "Checklist de entrega — o que você precisa ter ao final do dia",
+section("s5-deploy", "Sprint 5 — Deploy automático no GitHub Pages com GitHub Actions",
+    p("O GitHub Actions é um computador do GitHub que, a cada <code>push</code>, baixa o código, gera os dados com Python, roda os "
+      "testes, faz o build e publica no Pages. Se um teste falhar, <b>nada é publicado</b>, e o site no ar continua na última versão boa.") +
+    flow_h([("⬆️", "push na<br>main"), ("🐍", "Python gera<br>dados + pytest"), ("🧪", "npm ci<br>+ npm test"),
+            ("📦", "npm run<br>build"), ("🌐", "deploy no<br>Pages")]) +
     step([
-        ("Repositório criado no GitHub", "Verifique em <b>github.com/seu-usuario</b> se o repo aparece."),
-        ("Projeto scaffoldado no Antigravity", "Execute <code>npm run dev</code> e confirme que o site abre em <code>localhost:5173</code>."),
-        ("vite.config.ts com base path correto", "Abra o arquivo e confirme: <code>base: '/nome-do-repo/'</code>."),
-        ("Dados sintéticos gerados", "Confirme que <code>public/data/pedidos.json</code> existe e tem conteúdo."),
-        ("Testes unitários passando", "Execute <code>npm test</code> — resultado: 'X passed'."),
-        ("Primeiro commit na branch main", "No painel Git: stage, commit 'feat: setup inicial', push."),
-        ("Workflow rodou no Actions", "Na aba Actions do repo: o workflow deve estar verde."),
-        ("Site acessível no ar", "Acesse <code>https://seu-usuario.github.io/nome-do-repo/</code> e confirme que abre."),
+        ("Ative o Pages com Actions (uma vez)", "No GitHub: repositório → <b>Settings → Pages → Build and deployment → Source: GitHub Actions</b>."),
+        ("Crie o arquivo do workflow", "Caminho exato: <code>.github/workflows/deploy.yml</code> (com o ponto no começo de .github)."),
+        ("Confira requirements.txt e package-lock.json", "Os dois precisam estar commitados: o Actions instala exatamente o que está neles."),
+        ("Commit e push na main", "<code>ci: deploy automático no GitHub Pages</code>"),
+        ("Acompanhe", "Aba <b>Actions</b> do repositório: bolinha amarela = rodando, verde = publicado, vermelha = falhou (cliquem para ver o passo que quebrou)."),
+        ("Abra o site", f"<code>https://SEU-USUARIO.github.io/{REPO}/</code>. O endereço também aparece em Settings → Pages e no resumo do workflow."),
     ]) +
-    kpi([
-        ("8/8", "itens completos?"), ("< 2 min", "tempo de deploy"),
-        ("Vitest", "testes rodando"), ("PWA", "instalável offline"),
-    ])
+    code("""
+        # Publica o MVP no GitHub Pages a cada push na branch main.
+        # Pré-requisito (uma vez só): Settings → Pages → Source: "GitHub Actions".
+        name: Deploy no GitHub Pages
+
+        on:
+          push:
+            branches: [main]
+          workflow_dispatch:        # botão "Run workflow" na aba Actions
+
+        permissions:
+          contents: read
+          pages: write
+          id-token: write
+
+        concurrency:
+          group: pages
+          cancel-in-progress: true
+
+        jobs:
+          build:
+            runs-on: ubuntu-latest
+            steps:
+              - uses: actions/checkout@v7
+
+              - name: Python — gerar dados sintéticos e testar LGPD
+                uses: actions/setup-python@v7
+                with:
+                  python-version: '3.12'
+              - run: pip install -r requirements.txt
+              - run: python scripts/gerar_dados.py
+              - run: python -m pytest -q scripts
+
+              - name: Node — instalar, testar e compilar o front-end
+                uses: actions/setup-node@v7
+                with:
+                  node-version: '22'
+              - run: npm ci
+              - run: npm test
+              - run: npm run build
+
+              - uses: actions/configure-pages@v6
+              - uses: actions/upload-pages-artifact@v5
+                with:
+                  path: dist
+
+          deploy:
+            needs: build
+            runs-on: ubuntu-latest
+            environment:
+              name: github-pages
+              url: ${{ steps.deployment.outputs.page_url }}
+            steps:
+              - id: deployment
+                uses: actions/deploy-pages@v5
+        """, ".github/workflows/deploy.yml") +
+    ficha("g", "Validado",
+      "Este workflow e o <code>vite.config.ts</code> da Sprint 4a foram testados num projeto de referência: build, testes Python e "
+      "Vitest, site servido na subpasta do repositório, navegação por hash e funcionamento offline. As versões das actions "
+      "(<code>checkout@v7</code>, <code>deploy-pages@v5</code>…) eram as mais recentes em setembro de 2026. Se o agente sugerir "
+      "uma versão mais nova, podem aceitar.") +
+    prompt("""
+        Leia @docs/REGRAS-DO-PROJETO.md, @package.json e @vite.config.ts.
+        Tarefa S5.1: crie .github/workflows/deploy.yml para publicar no GitHub Pages a cada push na main:
+        job build (checkout; Python 3.12 com pip install -r requirements.txt, python scripts/gerar_dados.py e pytest;
+        Node 22 com npm ci, npm test e npm run build; upload-pages-artifact com path dist) e job deploy com deploy-pages.
+        Permissões: contents read, pages write, id-token write. Use as versões mais recentes das actions oficiais.
+        Depois me diga, passo a passo, o que devo configurar em Settings → Pages no GitHub.
+        """, "Prompt S5.1 — Workflow de deploy") +
+    prompt("""
+        O workflow do GitHub Actions falhou. Abaixo está o log do passo que ficou vermelho.
+        Explique a causa em linguagem simples, diga em qual arquivo está o problema e proponha a correção mínima.
+        Log: [COLE AQUI O TRECHO DO LOG, a partir da primeira linha com "Error"]
+        """, "Prompt S5.2 — Quando o deploy falhar") +
+    callout("err", "O site abriu em branco?",
+      "Em 9 de cada 10 casos é o <code>base</code> do <code>vite.config.ts</code> diferente do nome do repositório (atenção a maiúsculas). "
+      "Abram <b>F12 → Console</b>: erros 404 em arquivos <code>/assets/...</code> confirmam o diagnóstico.")
+)
+
+section("versionamento", "Versionamento profissional: branches, commits, PRs e tags",
+    p("Com o deploy automático, a <code>main</code> é o que está no ar. Por isso ela só recebe código testado. O trabalho do dia a dia "
+      "acontece em <b>branches</b>.") +
+    flow_h([("🌿", "Criar branch<br>sprint-3-telas"), ("💾", "Commits<br>por tarefa"), ("⬆️", "Push da<br>branch"),
+            ("🔀", "Pull Request<br>para a main"), ("👀", "Colega<br>revisa"), ("🚀", "Merge =<br>deploy")]) +
+    tbl(["Prática", "Como fazer no Antigravity/GitHub", "Exemplo"],
+        [["Branch por sprint ou tarefa grande", "Barra inferior (nome da branch) → <b>Create new branch</b>", "<code>sprint-2-regras</code>, <code>fix-grafico-mobile</code>"],
+         ["Conventional Commits", "Prefixo que diz o tipo da mudança", "<code>feat:</code> nova função · <code>fix:</code> correção · <code>test:</code> · <code>docs:</code> · <code>ci:</code> · <code>chore:</code>"],
+         ["Pull Request (PR)", "GitHub → aba <b>Pull requests → New</b> (ou o botão que aparece após o push da branch)", "\"Sprint 2: regras de negócio e papéis\""],
+         ["Revisão em dupla", "Outro integrante lê o PR, testa localmente e aprova", "Comentário: \"testei como Leitor, OK\""],
+         ["Tag de versão", "Ao fim de cada sprint: GitHub → <b>Releases → Draft a new release</b>", "<code>v0.1.0</code> (Sprint 1) … <code>v1.0.0</code> (MVP)"],
+         ["Issues", "Uma issue por tarefa do sprint.md; o commit cita o número", "<code>feat(painel): KPIs (S3.2) #12</code>"]]) +
+    prompt("""
+        Analise as mudanças ainda não commitadas (git diff) e sugira:
+        1. se devem virar 1 commit ou vários (agrupe por assunto);
+        2. a mensagem de cada commit no padrão Conventional Commits, em português, citando o código da tarefa do sprint.md.
+        Não faça o commit: só me mostre as sugestões.
+        """, "Prompt V1 — Mensagens de commit") +
+    prompt("""
+        Leia @docs/sprint.md e gere a descrição de um Pull Request da branch atual para a main, com:
+        Resumo (3 linhas), Tarefas concluídas (com códigos S?.?), Como testar (passos para o revisor), Prints sugeridos,
+        Checklist (testes passando, LGPD verificada, sem dados reais).
+        """, "Prompt V2 — Descrição de Pull Request") +
+    prompt("""
+        Leia @docs/sprint.md e transforme cada tarefa em uma issue do GitHub:
+        título "[S?.?] descrição curta", corpo com critério de aceite em checklist e rótulo (sprint-1, sprint-2...).
+        Entregue em Markdown para eu colar uma a uma no GitHub.
+        """, "Prompt V3 — Issues a partir do sprint.md")
+)
+
+section("readme", "README e transparência: documentando o que a IA fez",
+    p("Na Aula 7 ficou combinado: o README lista o que a IA gerou, quais prompts foram usados e o que foi revisado por pessoas. "
+      "Isso é <b>maturidade técnica</b>, não confissão. Numa auditoria, é o que prova que houve controle humano.") +
+    prompt("""
+        Leia @docs/contexto.md, @docs/sprint.md e a estrutura do projeto.
+        Escreva o README.md do repositório, em português, com as seções:
+        1. Nome do sistema + link do site no GitHub Pages + print da tela principal (deixe o marcador da imagem).
+        2. O problema e a solução (3 linhas) e os KPIs.
+        3. Como usar: papéis disponíveis no seletor "Ver como" e o que cada um faz.
+        4. Tecnologias: TypeScript + Vite, PWA, Python (dados sintéticos), Vitest, pytest, GitHub Actions/Pages.
+        5. Como rodar localmente: pré-requisitos e comandos (npm install, python scripts/gerar_dados.py, npm run dev, npm test).
+        6. Estrutura de pastas.
+        7. Roadmap: as 5 sprints com status (✅/🚧) e link para a release de cada uma.
+        8. Privacidade e LGPD: dados 100% sintéticos, campos mascarados, o que o sistema real precisaria (servidor, autenticação, logs em banco).
+        9. Transparência sobre IA: tabela Parte do sistema | Gerado por IA? | Revisado por | Prompt principal usado.
+        10. Equipe: [NOMES E PAPÉIS DO GRUPO].
+        """, "Prompt R1 — README completo") +
+    callout("note", "Print da tela no README",
+      "Salvem o print em <code>docs/img/painel.png</code> e usem <code>![Painel](docs/img/painel.png)</code>. Conferiram que o print não "
+      "mostra nenhum dado que pareça real?")
+)
+
+# =================================================================
+# PARTE 5 — BIBLIOTECA DE PROMPTS
+# =================================================================
+grp("Parte 5 · Biblioteca de prompts",
+    "Prompts prontos para consultar quando precisar: planejar, construir cada camada, depurar erros e revisar o código.")
+
+section("prompts-planejamento", "Prompts de planejamento e entendimento",
+    p("Para usar no início de cada sprint ou quando o grupo estiver travado.") +
+    prompt("""
+        Leia @docs/sprint.md e @docs/REGRAS-DO-PROJETO.md. Estamos começando a Sprint [N].
+        Liste as tarefas desta sprint na ordem em que devem ser feitas (dependências primeiro),
+        estime cada uma em P/M/G e aponte quais podem ser feitas em paralelo por pessoas diferentes do grupo.
+        """, "P1 — Planejar a sprint") +
+    prompt("""
+        Explique, como para alguém que nunca programou, o que faz o arquivo @[ARQUIVO].
+        Use no máximo 10 linhas, e depois liste as 3 partes mais importantes do código com o número da linha.
+        """, "P2 — Entender um arquivo") +
+    prompt("""
+        Desenhe em Mermaid (flowchart LR) a arquitetura atual do projeto: pastas src/, scripts/, public/data/,
+        o fluxo de dados do Python até a tela e o deploy pelo GitHub Actions. Salve em docs/arquitetura.md.
+        """, "P3 — Diagrama da arquitetura") +
+    prompt("""
+        Compare o que já foi implementado com @docs/sprint.md. Monte uma tabela Tarefa | Status (feito/parcial/não iniciado) |
+        Evidência (arquivo ou teste) | O que falta. Seja rigoroso: sem teste, é "parcial".
+        """, "P4 — Onde estamos?") +
+    prompt("""
+        Tenho [N HORAS] de aula para terminar o MVP. Olhando @docs/sprint.md e o que já existe, proponha o corte de escopo:
+        o que é essencial para a demonstração, o que pode ser simplificado e o que fica para depois. Justifique cada item.
+        """, "P5 — Cortar escopo com critério")
+)
+
+section("prompts-codigo", "Prompts de construção por camada",
+    h3("Dados (Python)") +
+    prompt("""
+        Acrescente ao scripts/gerar_dados.py a entidade [ENTIDADE] com os campos de @src/domain/tipos.ts,
+        ligada a [OUTRA ENTIDADE] pelo campo [CHAVE]. Toda chave estrangeira deve existir (sem órfãos).
+        Adicione um teste pytest que prova isso.
+        """, "C1 — Nova entidade relacionada") +
+    prompt("""
+        Os dados estão "bonitos demais". Ajuste o gerador para ter padrões realistas:
+        sazonalidade (mais pedidos em [MESES]), [UNIDADE] com o dobro de devoluções, e 3% de registros com campo opcional vazio.
+        Documente esses padrões em docs/dados.md para usarmos no pitch.
+        """, "C2 — Dados com história para contar") +
+    h3("Regras e serviços (TypeScript)") +
+    prompt("""
+        Implemente a regra [RN0X: DESCRIÇÃO] como função pura em src/domain/regras.ts.
+        Antes do código, escreva os testes Vitest (incluindo casos de limite) e me mostre. Depois implemente até passarem.
+        """, "C3 — Regra nova, testes primeiro") +
+    prompt("""
+        Crie a função calcularKpis(pedidos) em src/domain/kpis.ts que devolve [LISTA DE KPIs DO CONTEXTO.MD],
+        cada um com valor, meta, variação percentual e status ('ok' | 'atencao' | 'critico'). Com testes.
+        """, "C4 — Cálculo de KPIs") +
+    h3("Telas (TypeScript + CSS)") +
+    prompt("""
+        Crie o componente src/components/kpiCard.ts: recebe {titulo, valor, meta, status} e devolve o HTML do cartão.
+        Cor pelo status (verde/âmbar/vermelho) com texto além da cor (acessibilidade). Use em src/pages/painel.ts.
+        """, "C5 — Componente reutilizável") +
+    prompt("""
+        Adicione em src/pages/[TELA].ts um botão "Exportar CSV" que baixa os dados filtrados na tela,
+        separador ;, UTF-8 com BOM (abre certo no Excel), nome do arquivo com a data. Registre a exportação no log de auditoria.
+        """, "C6 — Exportar CSV") +
+    prompt("""
+        Deixe a tela [TELA] responsiva: no celular (até 480px) a tabela vira lista de cartões e os filtros ficam
+        num painel recolhível. Altere somente o CSS e o mínimo de HTML necessário.
+        """, "C7 — Versão celular") +
+    prompt("""
+        Adicione um modo escuro ao app: variáveis CSS para as cores, respeitando prefers-color-scheme,
+        com botão para alternar e a escolha salva no localStorage. Garanta contraste AA nos dois temas.
+        """, "C8 — Tema escuro") +
+    h3("PWA") +
+    prompt("""
+        Mostre um aviso "Você está offline — exibindo os últimos dados salvos" quando navigator.onLine for falso,
+        e esconda quando a conexão voltar. Não bloqueie o uso do app.
+        """, "C9 — Aviso de offline")
+)
+
+section("prompts-depuracao", "Prompts de depuração: quando algo dá errado",
+    p("O segredo é dar ao agente o <b>erro completo</b>, <b>o que vocês fizeram</b> e <b>o que esperavam</b>. \"Não funciona\" não é um relato de erro.") +
+    prompt("""
+        Rodei [COMANDO, ex.: npm run build] e deu o erro abaixo. Eu esperava [RESULTADO ESPERADO].
+        Explique a causa em linguagem simples, mostre o arquivo e a linha, e proponha a MENOR correção possível.
+        Não altere outros arquivos.
+        Erro completo:
+        [COLE O ERRO INTEIRO DO TERMINAL]
+        """, "D1 — Erro no terminal") +
+    prompt("""
+        A tela [TELA] abre em branco. No console do navegador (F12 → Console) aparece:
+        [COLE AS MENSAGENS VERMELHAS]
+        Investigue a causa antes de mudar código: me diga as hipóteses em ordem de probabilidade e como confirmar cada uma.
+        """, "D2 — Tela em branco") +
+    prompt("""
+        Localmente funciona, mas no GitHub Pages (https://[USUARIO].github.io/[REPO]/) [O QUE ACONTECE].
+        Verifique: base do vite.config.ts, caminhos com "/" fixo, uso de import.meta.env.BASE_URL,
+        rotas sem hash, start_url/scope do manifesto e maiúsculas no nome do repositório.
+        """, "D3 — Funciona local, quebra no Pages") +
+    prompt("""
+        O teste [NOME DO TESTE] está falhando. Antes de mexer: me diga se o erro está no TESTE ou no CÓDIGO,
+        comparando com a regra em @docs/contexto.md. Não altere o teste só para ele passar.
+        """, "D4 — Teste falhando") +
+    prompt("""
+        Você já tentou corrigir isto 3 vezes sem sucesso. Pare. Resuma o que tentou, por que cada tentativa falhou,
+        e proponha uma abordagem diferente e mais simples. Espere meu OK.
+        """, "D5 — Agente em loop") +
+    prompt("""
+        Depois de publicar uma versão nova, o app instalado no celular continua mostrando a versão antiga.
+        Verifique a configuração do vite-plugin-pwa (registerType, aviso de atualização) e me explique como forçar a atualização.
+        """, "D6 — PWA preso na versão antiga")
+)
+
+section("prompts-revisao", "Prompts de revisão, refatoração e documentação",
+    prompt("""
+        Revise @[ARQUIVO] procurando código duplicado, funções com mais de 40 linhas e nomes pouco claros.
+        Proponha a refatoração em passos pequenos, cada um mantendo os testes passando. Não mude comportamento.
+        """, "R1 — Refatorar com segurança") +
+    prompt("""
+        Rode npm test e python -m pytest -q scripts e me diga quais funções de src/domain e scripts NÃO têm teste.
+        Escreva os testes que faltam para as 3 mais importantes para o negócio.
+        """, "R2 — Cobrir o que falta") +
+    prompt("""
+        Audite a acessibilidade das telas: labels, ordem de tabulação, foco visível, contraste, textos alternativos,
+        uso de cor como única informação. Tabela Problema | Tela | Correção. Depois corrija os 5 mais graves.
+        """, "R3 — Acessibilidade") +
+    prompt("""
+        Rodei o Lighthouse (F12 → Lighthouse) e o resultado foi: [COLE AS NOTAS E OS ITENS APONTADOS].
+        Explique cada item em linguagem simples e corrija os que mais tiram ponto, um por vez, sem mudar o visual.
+        """, "R4 — Melhorar a nota do Lighthouse") +
+    prompt("""
+        Gere o roteiro do pitch de 3 minutos do MVP: Minuto 1 — o problema com número; Minuto 2 — a demonstração
+        (qual tela mostrar, em qual papel, qual clique); Minuto 3 — a recomendação e o próximo passo para a SESP.
+        Use os dados de public/data e os KPIs de @docs/contexto.md.
+        """, "R5 — Roteiro do pitch")
+)
+
+section("prompts-antipadroes", "Prompts ruins × prompts bons",
+    p("Os mesmos pedidos, antes e depois. A diferença está no contexto, no escopo e no critério de pronto.") +
+    antesdepois("Faz o sistema.",
+                "Leia @docs/sprint.md e execute só a tarefa S1.2 (gerador de dados). Mostre o plano antes. Pronto quando o pytest passar.") +
+    antesdepois("Arruma o erro.",
+                "npm run build falhou com o erro abaixo. Explique a causa e proponha a menor correção, sem mexer em outros arquivos. [erro completo]") +
+    antesdepois("Deixa o painel bonito.",
+                "No painel, os KPIs estão sem hierarquia. Aumente o valor para 32px, rótulo em cinza 13px, cor pelo status. Só src/style.css.") +
+    antesdepois("Coloca login no sistema.",
+                "Implemente o seletor 'Ver como' com os 4 papéis de @docs/contexto.md, usando pode() de src/auth/papeis.ts. Sem senha: é simulação.") +
+    antesdepois("Usa os dados da planilha da secretaria.",
+                "Gere dados sintéticos com a mesma estrutura de colunas abaixo, sem nenhum valor real. [só os nomes das colunas]") +
+    antesdepois("Melhora o código.",
+                "Revise @src/pages/pedidos.ts: aponte duplicações e cálculos que deveriam estar em src/domain. Tabela de achados, sem alterar nada.")
+)
+
+# =================================================================
+# FECHAMENTO
+# =================================================================
+grp("Fechamento", "Os problemas mais comuns e como resolver, o checklist de entrega, o glossário e um quiz para revisar.")
+
+section("problemas", "Problemas comuns e como resolver",
+    tbl(["Sintoma", "Causa provável", "Solução"],
+        [["Site publicado em branco", "<code>base</code> do Vite diferente do nome do repositório", "Corrigir <code>vite.config.ts</code> (maiúsculas importam), commit e push"],
+         ["404 ao carregar <code>/data/*.json</code>", "Caminho com \"/\" fixo", "Usar <code>import.meta.env.BASE_URL</code>"],
+         ["404 ao recarregar numa tela", "Rota sem hash (<code>/pedidos</code>)", "Usar rotas por hash (<code>#/pedidos</code>)"],
+         ["Actions: erro no job <code>deploy</code> dizendo que o Pages não está configurado", "Pages não configurado para Actions", "Settings → Pages → Source: <b>GitHub Actions</b>"],
+         ["Actions: <code>npm ci</code> falhou", "<code>package-lock.json</code> não commitado ou desatualizado", "Rodar <code>npm install</code> e commitar o lock"],
+         ["Actions: <code>pip install</code> falhou", "Falta o <code>requirements.txt</code>", "<code>pip freeze > requirements.txt</code> e commitar"],
+         ["\"npm.ps1 não pode ser carregado\"", "Política de scripts do PowerShell", "<code>Set-ExecutionPolicy -Scope CurrentUser RemoteSigned</code>"],
+         ["<code>python</code> abre a Microsoft Store", "Alias do Windows", "Desligar os aliases ou usar <code>py</code>"],
+         ["Push rejeitado (<i>rejected, fetch first</i>)", "Um colega enviou antes", "<b>Pull</b> (Sync) primeiro, depois push"],
+         ["Conflito de merge", "Duas pessoas editaram a mesma linha", "Abrir o arquivo e escolher <i>Accept Current/Incoming/Both</i>; na dúvida, pedir ao agente para explicar o conflito"],
+         ["App não atualiza após o deploy", "Service worker com versão antiga", "F12 → Application → Unregister + <code>Ctrl+Shift+R</code>"],
+         ["<code>node_modules</code> apareceu no GitHub", "<code>.gitignore</code> ausente no primeiro commit", "<code>git rm -r --cached node_modules</code> (tira do Git sem apagar do disco) e commit"],
+         ["O agente mexeu em arquivos demais", "Prompt sem limite de escopo", "Source Control → Discard Changes nos arquivos indevidos; repetir com \"altere somente X\""]])
+)
+
+section("checklist", "Checklist de entrega do Dia 8 (Definição de Pronto)",
+    h3("Repositório") +
+    checklist(["Repositório público no GitHub com todos os integrantes como colaboradores",
+               "<code>docs/contexto.md</code>, <code>docs/sprint.md</code> e <code>docs/REGRAS-DO-PROJETO.md</code> commitados",
+               "<code>.gitignore</code> funcionando: sem <code>node_modules</code>, <code>dist</code> e <code>.venv</code> no repositório",
+               "Commits pequenos, com mensagens no padrão Conventional Commits"]) +
+    h3("Código") +
+    checklist(["<code>scripts/gerar_dados.py</code> gera os JSON sintéticos; <code>pytest</code> passa (LGPD garantida)",
+               "Regras de negócio em <code>src/domain</code> com testes; <code>npm test</code> passa",
+               "Seletor de papel funcionando; cada papel vê só o que pode",
+               "Painel com os KPIs do contexto.md, passando no teste dos 5 segundos",
+               "PWA: instalável, com ícone e abrindo offline"]) +
+    h3("Publicação") +
+    checklist(["Workflow do GitHub Actions verde na aba Actions",
+               "Site abrindo em <code>https://SEU-USUARIO.github.io/NOME-DO-REPO/</code>, inclusive no celular",
+               "README com link, como rodar, roadmap, LGPD e transparência sobre IA",
+               "Release/tag da última sprint concluída",
+               "Pitch de 3 minutos ensaiado com o site publicado"])
 )
 
 section("glossario", "Glossário rápido",
-    glossary([
-        ("PWA (Progressive Web App)", "Aplicação web que funciona offline e pode ser instalada na tela inicial do celular. Usa service worker para cache."),
-        ("Service Worker", "Script que roda em segundo plano no navegador, fazendo cache de páginas e dados para funcionar offline."),
-        ("Vite", "Build tool moderno (sucessor do webpack). Compila TypeScript e empacota assets rapidamente."),
-        ("Vitest", "Framework de testes unitários em TypeScript, compatível com Vite, extremamente rápido."),
-        ("CI/CD (Continuous Integration / Deploy)", "Pipeline automático que testa e publica código a cada mudança."),
-        ("GitHub Actions", "Plataforma de CI/CD integrada ao GitHub. Roda scripts na nuvem a cada push."),
-        ("workflow_dispatch", "Gatilho manual do GitHub Actions. Permite rodar o workflow pelo botão 'Run workflow'."),
-        ("BASE_URL", "Variável do Vite que contém o caminho base do projeto (ex: '/mvp-pedidos-sesp/'). Usada para montar URLs de assets."),
-        ("vite-plugin-pwa", "Plugin Vite que gera service worker, manifesto PWA e ícones automaticamente."),
-        ("pytest", "Framework de testes Python. Usado no CI para verificar que os dados sintéticos não expõem CPFs."),
+    grid2([
+        ("Construção", glossary([
+            ("Vite", "Ferramenta que roda o projeto em desenvolvimento (<code>npm run dev</code>) e gera a versão final (<code>npm run build</code>)."),
+            ("TypeScript (TS)", "JavaScript com tipos. Aponta erros antes de rodar. Vira JS no build."),
+            ("Build / dist/", "O processo de compilar o projeto e a pasta com o resultado, que é o que vai para o Pages."),
+            ("npm / package.json", "Gerenciador de pacotes do Node e o arquivo que lista dependências e scripts."),
+            ("venv / pip", "Ambiente isolado do Python e o instalador de pacotes Python."),
+            ("Vitest / pytest", "Ferramentas de teste automatizado para TypeScript e para Python."),
+            ("Função pura", "Função que só depende das entradas e não mexe em tela nem rede. Fácil de testar."),
+        ])),
+        ("Publicação", glossary([
+            ("PWA", "Site que se instala como app, com ícone, tela cheia e modo offline."),
+            ("Service worker", "JavaScript que roda em segundo plano e guarda arquivos para o modo offline."),
+            ("Manifesto", "Arquivo com nome, ícones e cores do app instalado."),
+            ("GitHub Pages", "Hospedagem gratuita de sites estáticos a partir de um repositório."),
+            ("GitHub Actions / workflow", "Automação do GitHub; o workflow é o arquivo YAML com os passos."),
+            ("base", "Subpasta onde o site fica publicado (<code>/nome-do-repo/</code>)."),
+            ("Rota por hash", "Endereço de tela depois do # (<code>#/painel</code>); funciona em hospedagem estática."),
+            ("Pull Request / Tag", "Pedido de revisão para juntar uma branch na main; marco de versão (<code>v1.0.0</code>)."),
+        ])),
     ])
 )
 
-section("quiz-final", "Quiz rápido — teste seu conhecimento",
-    q("Qual arquivo define o caminho base do projeto no GitHub Pages?",
-      ["package.json", "vite.config.ts", "deploy.yml", "manifest.webmanifest"], 1,
-      "O base path (/nome-do-repo/) é configurado no vite.config.ts, não no workflow.") +
-    q("Por que usamos dados sintéticos no MVP?",
-      ["Para o projeto parecer mais bonito", "Para não expor dados reais de cidadãos (LGPD)", "Porque não temos acesso à base de dados real", "Para o GitHub Actions funcionar"], 1,
-      "A LGPD proíbe colocar dados pessoais de cidadãos em chatbots públicos e sistemas de demonstração.") +
-    q("O que acontece quando você faz push na branch main?",
-      ["Nada automático", "O GitHub Actions executa o workflow: testa, compila e publica", "O site cai", "O notebooklm atualiza"], 1,
-      "O workflow dispara automaticamente: Python (dados), Node (testes + build), deploy-pages.") +
-    q("O que é o workflow_dispatch?",
-      ["Um bug do GitHub", "Um gatilho que permite rodar o workflow manualmente pelo botão", "Um tipo de branch", "Um script Python"], 1,
-      "Útil para testar o build antes de fazer merge de uma PR.")
-)
-
-section("ate-proxima", "Até a próxima — e não pare de codar",
-    p("Você terminou o Dia 8 com um MVP no ar. Isso significa que:") +
-    grid2([
-        ("Código versionado", "Tudo que você escreve está no Git, com histórico, branches e capacidade de reverter erros."),
-        ("Testes automatizados", "Qualquer mudança que quebre algo vai aparecer no CI antes de chegar em produção."),
-        ("Site acessível", "Qualquer pessoa com o link consegue acessar — sem instalar nada, direto do celular."),
-        ("PWA offline", "Mesmo sem internet, o site continua funcionando com os dados em cache."),
-    ]) +
-    callout("purple", "Próximo passo", "Na próxima aula, vamos expandir o MVP com "
-      "mais funcionalidades e aprofundar a engenharia de prompts para que o agente "
-      "gere código de maior complexidade com menos retrabalho.") +
-    p("Até lá: commite todo dia, rode os testes, e use o painel Agent para perguntar "
-      "'como fazer isso?' antes de pesquisar no Google. O agente é o seu primeiro par de olhos técnicos.")
+section("quiz", "Quiz rápido",
+    q("O site publicado abre em branco, mas no <code>npm run dev</code> funciona. Qual a primeira coisa a conferir?",
+      ["O token do GitHub", "O <code>base</code> do <code>vite.config.ts</code>", "A versão do Python", "O tema escuro"], 1,
+      "O Pages publica em <code>/nome-do-repo/</code>; sem o base certo, o navegador procura os arquivos na raiz.") +
+    q("Onde deve ficar o mascaramento do CPF?",
+      ["No CSS da tela", "No script Python, antes de gerar o JSON", "No README", "No service worker"], 1,
+      "Se o dado completo chega ao JSON, ele é público no GitHub Pages, mesmo que a tela esconda.") +
+    q("Por que usar rotas como <code>#/pedidos</code> em vez de <code>/pedidos</code>?",
+      ["É mais bonito", "O GitHub Pages não conhece as rotas do app e daria 404 ao recarregar", "O TypeScript exige", "Para o PWA ter ícone"], 1) +
+    q("O agente quer rodar <code>npm create vite . --overwrite</code> na pasta com o contexto.md. O que fazer?",
+      ["Aprovar, é rápido", "Recusar: --overwrite apaga os arquivos existentes", "Aprovar e recuperar depois pelo Pages", "Rodar como administrador"], 1) +
+    q("Qual é o tamanho ideal de um pedido ao agente?",
+      ["A sprint inteira", "Uma tarefa do sprint.md, com critério de pronto", "O projeto todo de uma vez", "Uma linha de código"], 1) +
+    q("Um teste falhou. O agente propõe mudar o teste para ele passar. Qual a atitude correta?",
+      ["Aceitar", "Verificar no contexto.md se o erro está no teste ou no código", "Apagar o teste", "Desligar o Vitest no workflow"], 1)
 )
 
 # =================================================================
 # BUILD
 # =================================================================
-if cur_group:
-    toc_groups.append((cur_group, cur_items))
-
 def build_toc():
     out = ""
-    for gtitle, items in toc_groups:
+    for gi, (gtitle, _) in enumerate(grupos):
         out += f'<div class="grp">{gtitle}</div>'
-        for anchor, titulo in items:
-            out += f'<a href="#{anchor}" data-anchor="{anchor}">{titulo}</a>'
+        for anchor, titulo, _, g in sections:
+            if g == gi:
+                out += f'<a href="#{anchor}" data-anchor="{anchor}">{titulo}</a>'
     return out
+
+def build_sumario():
+    out = '<div class="sumario"><h2>Sumário</h2>'
+    for gi, (gtitle, _) in enumerate(grupos):
+        out += f'<div class="sg">{gtitle}</div>'
+        for i, (anchor, titulo, _, g) in enumerate(sections, start=1):
+            if g == gi:
+                pg = PAGINAS.get(anchor, "")
+                out += (f'<div class="si"><span class="n">{i}</span><span>{titulo}</span>'
+                        f'<span class="dots"></span><span class="pg">{pg}</span></div>')
+    return out + "</div>"
 
 def build_sections():
     out = ""
-    for i, (anchor, titulo, body) in enumerate(sections, start=1):
-        out += (f'<section id="{anchor}"><span class="secnum">§ {i}</span>'
-                f'<h2>{titulo}</h2>{body}</section>')
+    visto = set()
+    for i, (anchor, titulo, body, g) in enumerate(sections, start=1):
+        banner, cls = "", ""
+        if g not in visto:
+            visto.add(g)
+            cls = ' class="inicio-parte"'
+            gtitle, gdesc = grupos[g]
+            nomes = "".join(f"<li>{t}</li>" for _, t, _, gg in sections if gg == g)
+            kicker, _, resto = gtitle.partition(" · ")
+            banner = (f'<div class="parte"><div class="pk">{kicker}</div>'
+                      f'<div class="pt">{resto or kicker}</div><p class="pd">{gdesc}</p><ol>{nomes}</ol></div>')
+        out += (f'<section id="{anchor}"{cls}>{banner}<div class="shead"><span class="secnum">§ {i}</span>'
+                f'<h2>{titulo}</h2></div>{body}</section>')
     return out
 
-HTML = f"""<!doctype html>
+TEMPLATE = """<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Caderno do Dia 8 · SESP/MT</title>
-<meta name="description" content="Caderno de aprofundamento do Dia 8: do NotebookLM ao MVP no ar — prompts, stack técnica, GitHub Pages e deploy automático.">
+<meta name="description" content="Caderno do Dia 8 do Curso SESP/MT: do contexto.md e sprint.md ao MVP publicado — TypeScript, Python e PWA no Antigravity, versionado no GitHub e publicado no GitHub Pages, com biblioteca de prompts.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
-<style>{CSS}</style>
+<style>__CSS__</style>
 </head>
 <body>
 <header class="top">
   <div class="inner">
-    <span class="kicker">Dia 8 · SESP/MT</span>
-    <h1>Do NotebookLM ao MVP no Ar — Prompt Engineering e Deploy Automático</h1>
-    <p class="sub">Caderno de aprofundamento: transforme contexto e sprints do NotebookLM em um MVP
-      funcional, versionado no GitHub e hospedado no GitHub Pages — com testes e PWA offline.</p>
-    <div class="meta">Curso de Capacitação SESP/MT · Professor Renato Rosa · Módulo 8</div>
+    <span class="kicker">Aula 8 · Construindo o MVP</span>
+    <h1>Do sprint.md ao MVP no ar</h1>
+    <p class="sub">Passo a passo e biblioteca de prompts para construir o MVP do grupo no Antigravity:
+      TypeScript e Python num PWA, versionado no GitHub e publicado automaticamente no GitHub Pages.</p>
+    <div class="meta">Curso de Capacitação SESP/MT · Professor Renato Rosa · Dia 8</div>
   </div>
 </header>
+__SUMARIO__
 <div class="wrap shell">
   <nav class="toc">
     <input type="text" id="tocsearch" placeholder="Buscar no índice...">
-    <div id="tocgroups">{build_toc()}</div>
+    <div id="tocgroups">__TOC__</div>
   </nav>
   <main>
-    {build_sections()}
+    __SECTIONS__
   </main>
 </div>
 <footer class="pagefoot">Caderno do Dia 8 · Curso de Capacitação SESP/MT · Professor Renato Rosa</footer>
 <button class="themebtn" id="themebtn">🌗 Tema</button>
 <button class="pdfbtn" id="pdfbtn">🖨️ Imprimir / PDF</button>
 <script>
-(function(){{
+(function(){
   var btnT = document.getElementById('themebtn');
   var root = document.documentElement;
   var saved = null;
-  try {{ saved = localStorage.getItem('caderno-theme'); }} catch(e) {{}}
+  try { saved = localStorage.getItem('caderno-theme'); } catch(e) {}
   if (saved) root.setAttribute('data-theme', saved);
-  btnT.addEventListener('click', function(){{
+  btnT.addEventListener('click', function(){
     var cur = root.getAttribute('data-theme');
     var next = cur === 'dark' ? 'light' : 'dark';
     root.setAttribute('data-theme', next);
-    try {{ localStorage.setItem('caderno-theme', next); }} catch(e) {{}}
-  }});
-  document.getElementById('pdfbtn').addEventListener('click', function(){{ window.print(); }});
+    try { localStorage.setItem('caderno-theme', next); } catch(e) {}
+  });
+  document.getElementById('pdfbtn').addEventListener('click', function(){ window.print(); });
+
+  // ao imprimir, abre as respostas do quiz
+  var abertos = [];
+  window.addEventListener('beforeprint', function(){
+    document.querySelectorAll('details:not([open])').forEach(function(d){ d.open = true; abertos.push(d); });
+  });
+  window.addEventListener('afterprint', function(){ abertos.forEach(function(d){ d.open = false; }); abertos = []; });
+
+  // botão "Copiar" em cada bloco de código/prompt
+  document.querySelectorAll('ul.f').forEach(function(block){
+    var b = document.createElement('button');
+    b.className = 'cpy'; b.type = 'button'; b.textContent = 'Copiar';
+    b.addEventListener('click', function(){
+      var txt = Array.prototype.map.call(block.querySelectorAll('li'), function(li){ return li.textContent; }).join('\\n');
+      var done = function(){ b.textContent = 'Copiado ✓'; setTimeout(function(){ b.textContent = 'Copiar'; }, 1500); };
+      if (navigator.clipboard) { navigator.clipboard.writeText(txt).then(done, function(){}); }
+      else { var t = document.createElement('textarea'); t.value = txt; document.body.appendChild(t); t.select();
+             try { document.execCommand('copy'); done(); } catch(e) {} document.body.removeChild(t); }
+    });
+    block.appendChild(b);
+  });
 
   var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
   var secs = Array.prototype.slice.call(document.querySelectorAll('main section'));
-  function onScroll(){{
+  function onScroll(){
     var pos = window.scrollY + 120;
     var current = secs[0];
-    secs.forEach(function(s){{ if (s.offsetTop <= pos) current = s; }});
-    links.forEach(function(a){{ a.classList.toggle('active', a.getAttribute('data-anchor') === current.id); }});
-  }}
+    secs.forEach(function(s){ if (s.offsetTop <= pos) current = s; });
+    links.forEach(function(a){ a.classList.toggle('active', a.getAttribute('data-anchor') === current.id); });
+  }
   window.addEventListener('scroll', onScroll);
   onScroll();
 
   var search = document.getElementById('tocsearch');
-  search.addEventListener('input', function(){{
+  search.addEventListener('input', function(){
     var term = search.value.toLowerCase();
-    links.forEach(function(a){{
+    links.forEach(function(a){
       var show = a.textContent.toLowerCase().indexOf(term) !== -1;
       a.style.display = show ? '' : 'none';
-    }});
-    document.querySelectorAll('#tocgroups .grp').forEach(function(g){{
+    });
+    document.querySelectorAll('#tocgroups .grp').forEach(function(g){
       var next = g.nextElementSibling, any = false;
-      while (next && !next.classList.contains('grp')) {{
+      while (next && !next.classList.contains('grp')) {
         if (next.style.display !== 'none') any = true;
         next = next.nextElementSibling;
-      }}
+      }
       g.style.display = any ? '' : 'none';
-    }});
-  }});
-}})();
+    });
+  });
+})();
 </script>
 </body>
 </html>
 """
 
+HTML = (TEMPLATE.replace("__CSS__", CSS)
+                .replace("__SUMARIO__", build_sumario())
+                .replace("__TOC__", build_toc())
+                .replace("__SECTIONS__", build_sections()))
 OUT.write_text(HTML, encoding="utf-8")
-print(f"Gerado: {OUT}")
-print(f"Seções: {len(sections)} | Grupos: {len(toc_groups)} | Tamanho: {len(HTML)//1024} KB")
+print("Gerado:", OUT.name, "-", len(sections), "secoes -", len(HTML) // 1024, "KB")
